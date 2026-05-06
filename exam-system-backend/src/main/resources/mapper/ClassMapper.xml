@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.exam.mapper.ClassMapper">
+    
+    <resultMap id="BaseResultMap" type="com.exam.entity.ClassInfo">
+        <id column="id" property="id"/>
+        <result column="class_name" property="className"/>
+        <result column="class_code" property="classCode"/>
+        <result column="department_id" property="departmentId"/>
+        <result column="grade" property="grade"/>
+        <result column="description" property="description"/>
+        <result column="department_name" property="departmentName"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+    
+    <sql id="Base_Column_List">
+        id, class_name, class_code, department_id, grade, description, create_time, update_time, deleted
+    </sql>
+    
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM class_info
+        WHERE id = #{id}
+    </select>
+    
+    <select id="selectList" resultMap="BaseResultMap">
+        SELECT DISTINCT c.id, c.class_name, c.class_code, c.department_id, c.grade, c.description, 
+               d.dept_name as department_name, c.create_time, c.update_time, c.deleted
+        FROM class_info c
+        LEFT JOIN department d ON c.department_id = d.id
+        WHERE 1=1
+        <if test="departmentId != null">
+            AND c.department_id = #{departmentId}
+        </if>
+        ORDER BY c.create_time DESC
+    </select>
+    
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO class_info (class_name, class_code, department_id, grade, description)
+        VALUES (#{className}, #{classCode}, #{departmentId}, #{grade}, #{description})
+    </insert>
+    
+    <update id="updateById">
+        UPDATE class_info
+        <set>
+            <if test="className != null">class_name = #{className},</if>
+            <if test="classCode != null">class_code = #{classCode},</if>
+            <if test="departmentId != null">department_id = #{departmentId},</if>
+            <if test="grade != null">grade = #{grade},</if>
+            <if test="description != null">description = #{description},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+    
+    <delete id="deleteById">
+        DELETE FROM class_info WHERE id = #{id}
+    </delete>
+    
+</mapper>

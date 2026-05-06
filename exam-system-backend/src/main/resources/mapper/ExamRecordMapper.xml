@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.exam.mapper.ExamRecordMapper">
+    
+    <resultMap id="BaseResultMap" type="com.exam.entity.ExamRecord">
+        <id column="id" property="id"/>
+        <result column="exam_id" property="examId"/>
+        <result column="student_id" property="studentId"/>
+        <result column="score" property="score"/>
+        <result column="answers" property="answers"/>
+        <result column="submit_time" property="submitTime"/>
+        <result column="status" property="status"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+    
+    <sql id="Base_Column_List">
+        id, exam_id, student_id, score, answers, submit_time, status, create_time, update_time
+    </sql>
+    
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM exam_record
+        WHERE id = #{id}
+    </select>
+    
+    <select id="selectList" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM exam_record
+        WHERE 1=1
+        <if test="examId != null">
+            AND exam_id = #{examId}
+        </if>
+        <if test="studentId != null">
+            AND student_id = #{studentId}
+        </if>
+        ORDER BY create_time DESC
+    </select>
+    
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO exam_record (exam_id, student_id, score, answers, submit_time, status)
+        VALUES (#{examId}, #{studentId}, #{score}, #{answers}, #{submitTime}, #{status})
+    </insert>
+    
+    <update id="updateById">
+        UPDATE exam_record
+        <set>
+            <if test="score != null">score = #{score},</if>
+            <if test="answers != null">answers = #{answers},</if>
+            <if test="submitTime != null">submit_time = #{submitTime},</if>
+            <if test="status != null">status = #{status},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+    
+    <delete id="deleteById">
+        DELETE FROM exam_record WHERE id = #{id}
+    </delete>
+    
+    <select id="countParticipants" resultType="int">
+        SELECT COUNT(DISTINCT student_id) FROM exam_record
+    </select>
+    
+    <select id="countByMonth" resultType="int">
+        SELECT COUNT(*) FROM exam_record 
+        WHERE YEAR(submit_time) = #{year} 
+        AND MONTH(submit_time) = #{month}
+    </select>
+    
+</mapper>

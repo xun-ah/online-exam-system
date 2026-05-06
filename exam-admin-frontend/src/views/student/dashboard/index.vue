@@ -1,0 +1,537 @@
+<template>
+  <div class="student-dashboard">
+    <!-- 欢迎信息 -->
+    <div class="welcome-card">
+      <div class="welcome-header">
+        <h2>欢迎回来，{{ studentInfo.realName || '同学' }}！</h2>
+      </div>
+      <div class="welcome-info">
+        <span>{{ studentInfo.className || '班级' }}</span>
+        <span class="divider">|</span>
+        <span>本学期已完成 {{ stats.completedCount }} 场考试</span>
+        <span class="divider">|</span>
+        <span>平均成绩 {{ stats.avgScore }} 分</span>
+      </div>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="stats-cards">
+      <div class="stat-card blue">
+        <div class="stat-value">{{ stats.pendingCount }}</div>
+        <div class="stat-label">待考考试</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-value">{{ stats.completedCount }}</div>
+        <div class="stat-label">已完成</div>
+      </div>
+      <div class="stat-card orange">
+        <div class="stat-value">{{ stats.avgScore }}</div>
+        <div class="stat-label">平均分</div>
+      </div>
+      <div class="stat-card red">
+        <div class="stat-value">{{ stats.classRank }}</div>
+        <div class="stat-label">班级排名</div>
+      </div>
+    </div>
+
+    <!-- 主内容区 -->
+    <div class="main-content">
+      <!-- 左侧：待考考试 -->
+      <div class="left-section">
+        <div class="section-card">
+          <h3 class="section-title">待考考试</h3>
+          <div v-if="pendingExams.length === 0" class="empty-state">
+            <el-empty description="暂无待考考试" />
+          </div>
+          <div v-else class="exam-list">
+            <div 
+              v-for="exam in pendingExams" 
+              :key="exam.id" 
+              class="exam-item"
+              :class="{ 'exam-active': canEnterExam(exam) }"
+            >
+              <div class="exam-info">
+                <h4>{{ exam.examName }}</h4>
+                <div class="exam-details">
+                  <span>考试时间：{{ formatDateTime(exam.startTime) }}</span>
+                  <span class="divider">|</span>
+                  <span>时长：{{ exam.duration }}分钟</span>
+                  <span class="divider">|</span>
+                  <span>总分：{{ exam.totalScore }}分</span>
+                </div>
+              </div>
+              <div class="exam-action">
+                <el-button 
+                  v-if="canEnterExam(exam)" 
+                  type="primary" 
+                  @click="enterExam(exam)"
+                >
+                  进入考场
+                </el-button>
+                <el-button v-else disabled>未开始</el-button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧：成绩趋势和最近考试 -->
+      <div class="right-section">
+        <!-- 成绩趋势图 -->
+        <div class="section-card">
+          <h3 class="section-title">成绩趋势</h3>
+          <div class="chart-container">
+            <v-chart v-if="scoreTrend.length > 0" class="chart" :option="chartOption" autoresize />
+            <el-empty v-else description="暂无考试数据" />
+          </div>
+        </div>
+
+        <!-- 最近考试 -->
+        <div class="section-card">
+          <h3 class="section-title">最近考试</h3>
+          <div v-if="recentExams.length === 0" class="empty-state">
+            <el-empty description="暂无考试记录" />
+          </div>
+          <div v-else class="recent-exam-list">
+            <div v-for="record in recentExams" :key="record.id" class="recent-exam-item">
+              <span class="exam-name">{{ record.examName }}</span>
+              <span class="exam-score" :class="getScoreClass(record.score)">
+                {{ record.score }}分
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import VChart from 'vue-echarts'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { LineChart } from 'echarts/charts'
+import { TitleComponent, TooltipComponent, GridComponent } from 'echarts/components'
+import request from '@/utils/request'
+import { useUserStore } from '@/store/user'
+
+// 注册 echarts 组件
+use([CanvasRenderer, LineChart, TitleComponent, TooltipComponent, GridComponent])
+
+const router = useRouter()
+const userStore = useUserStore()
+
+// 学生信息
+const studentInfo = reactive({
+  realName: '',
+  className: ''
+})
+
+// 统计数据
+const stats = reactive({
+  pendingCount: 0,
+  completedCount: 0,
+  avgScore: 0,
+  classRank: 0
+})
+
+// 待考考试
+const pendingExams = ref([])
+
+// 最近考试
+const recentExams = ref([])
+
+// 成绩趋势数据
+const scoreTrend = ref([])
+
+// 图表配置
+const chartOption = computed(() => ({
+  tooltip: {
+    trigger: 'axis'
+  },
+  grid: {
+    left: '3%',
+    right: '4%',
+    bottom: '3%',
+    containLabel: true
+  },
+  xAxis: {
+    type: 'category',
+    boundaryGap: false,
+    data: scoreTrend.value.map(item => item.examName)
+  },
+  yAxis: {
+    type: 'value',
+    min: 0,
+    max: 100
+  },
+  series: [
+    {
+      name: '成绩',
+      type: 'line',
+      data: scoreTrend.value.map(item => item.score),
+      smooth: true,
+      itemStyle: {
+        color: '#409EFF'
+      },
+      areaStyle: {
+        color: {
+          type: 'linear',
+          x: 0,
+          y: 0,
+          x2: 0,
+          y2: 1,
+          colorStops: [
+            { offset: 0, color: 'rgba(64, 158, 255, 0.3)' },
+            { offset: 1, color: 'rgba(64, 158, 255, 0.05)' }
+          ]
+        }
+      }
+    }
+  ]
+}))
+
+// 格式化日期时间
+const formatDateTime = (dateTime) => {
+  if (!dateTime) return ''
+  const date = new Date(dateTime)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day} ${hours}:${minutes}`
+}
+
+// 判断是否可以进入考试
+const canEnterExam = (exam) => {
+  const now = new Date()
+  const startTime = new Date(exam.startTime)
+  const endTime = new Date(startTime.getTime() + exam.duration * 60000)
+  return now >= startTime && now <= endTime
+}
+
+// 进入考试
+const enterExam = (exam) => {
+  router.push({
+    name: 'OnlineExam',
+    query: { examId: exam.id }
+  })
+}
+
+// 获取分数样式类
+const getScoreClass = (score) => {
+  if (score >= 90) return 'score-excellent'
+  if (score >= 80) return 'score-good'
+  if (score >= 60) return 'score-pass'
+  return 'score-fail'
+}
+
+// 加载学生信息
+const loadStudentInfo = async () => {
+  try {
+    const res = await request.get('/student/info')
+    if (res.data) {
+      studentInfo.realName = res.data.realName || userStore.userInfo?.realName
+      studentInfo.className = res.data.className || ''
+    }
+  } catch (error) {
+    console.error('加载学生信息失败:', error)
+    studentInfo.realName = userStore.userInfo?.realName || '同学'
+  }
+}
+
+// 加载统计数据
+const loadStats = async () => {
+  try {
+    const res = await request.get('/student/dashboard/stats')
+    if (res.data) {
+      stats.pendingCount = res.data.pendingCount || 0
+      stats.completedCount = res.data.completedCount || 0
+      stats.avgScore = res.data.avgScore || 0
+      stats.classRank = res.data.classRank || 0
+    }
+  } catch (error) {
+    console.error('加载统计数据失败:', error)
+  }
+}
+
+// 加载待考考试
+const loadPendingExams = async () => {
+  try {
+    const res = await request.get('/student/exams/pending')
+    pendingExams.value = res.data || []
+  } catch (error) {
+    console.error('加载待考考试失败:', error)
+  }
+}
+
+// 加载最近考试
+const loadRecentExams = async () => {
+  try {
+    const res = await request.get('/student/exams/recent')
+    recentExams.value = res.data || []
+  } catch (error) {
+    console.error('加载最近考试失败:', error)
+  }
+}
+
+// 加载成绩趋势
+const loadScoreTrend = async () => {
+  try {
+    const res = await request.get('/student/score/trend')
+    scoreTrend.value = res.data || []
+  } catch (error) {
+    console.error('加载成绩趋势失败:', error)
+  }
+}
+
+onMounted(() => {
+  loadStudentInfo()
+  loadStats()
+  loadPendingExams()
+  loadRecentExams()
+  loadScoreTrend()
+})
+</script>
+
+<style scoped lang="scss">
+.student-dashboard {
+  padding: 20px;
+  background: #f0f2f5;
+  min-height: calc(100vh - 56px);
+}
+
+.welcome-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 24px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+
+  .welcome-header {
+    h2 {
+      margin: 0 0 12px 0;
+      font-size: 20px;
+      color: #303133;
+    }
+  }
+
+  .welcome-info {
+    color: #909399;
+    font-size: 14px;
+
+    .divider {
+      margin: 0 8px;
+    }
+  }
+}
+
+.stats-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+
+  .stat-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 24px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    position: relative;
+    overflow: hidden;
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+    }
+
+    &.blue::before {
+      background: #409EFF;
+    }
+
+    &.green::before {
+      background: #67C23A;
+    }
+
+    &.orange::before {
+      background: #E6A23C;
+    }
+
+    &.red::before {
+      background: #F56C6C;
+    }
+
+    .stat-value {
+      font-size: 32px;
+      font-weight: bold;
+      margin-bottom: 8px;
+
+      .blue & {
+        color: #409EFF;
+      }
+
+      .green & {
+        color: #67C23A;
+      }
+
+      .orange & {
+        color: #E6A23C;
+      }
+
+      .red & {
+        color: #F56C6C;
+      }
+    }
+
+    .stat-label {
+      color: #909399;
+      font-size: 14px;
+    }
+  }
+}
+
+.main-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+
+  .left-section,
+  .right-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+}
+
+.section-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+
+  .section-title {
+    margin: 0 0 16px 0;
+    font-size: 16px;
+    color: #303133;
+    font-weight: 600;
+  }
+}
+
+.exam-list {
+  .exam-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
+    margin-bottom: 12px;
+    background: #fafafa;
+    border-radius: 8px;
+    border-left: 4px solid #E6A23C;
+    transition: all 0.3s;
+
+    &.exam-active {
+      border-left-color: #409EFF;
+      background: #f5f7fa;
+
+      &:hover {
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+      }
+    }
+
+    .exam-info {
+      flex: 1;
+
+      h4 {
+        margin: 0 0 8px 0;
+        font-size: 15px;
+        color: #303133;
+      }
+
+      .exam-details {
+        color: #909399;
+        font-size: 13px;
+
+        .divider {
+          margin: 0 8px;
+        }
+      }
+    }
+
+    .exam-action {
+      margin-left: 16px;
+    }
+  }
+}
+
+.chart-container {
+  height: 300px;
+
+  .chart {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+.recent-exam-list {
+  .recent-exam-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid #f0f0f0;
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    .exam-name {
+      color: #606266;
+      font-size: 14px;
+    }
+
+    .exam-score {
+      font-weight: 600;
+      font-size: 14px;
+
+      &.score-excellent {
+        color: #67C23A;
+      }
+
+      &.score-good {
+        color: #409EFF;
+      }
+
+      &.score-pass {
+        color: #E6A23C;
+      }
+
+      &.score-fail {
+        color: #F56C6C;
+      }
+    }
+  }
+}
+
+.empty-state {
+  padding: 20px 0;
+}
+
+@media (max-width: 1200px) {
+  .main-content {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+</style>

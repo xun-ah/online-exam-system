@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.exam.mapper.TeacherMapper">
+    
+    <resultMap id="BaseResultMap" type="com.exam.entity.Teacher">
+        <id column="id" property="id"/>
+        <result column="teacher_no" property="teacherNo"/>
+        <result column="real_name" property="realName"/>
+        <result column="gender" property="gender"/>
+        <result column="phone" property="phone"/>
+        <result column="email" property="email"/>
+        <result column="department_id" property="departmentId"/>
+        <result column="user_id" property="userId"/>
+        <result column="status" property="status"/>
+        <result column="department_name" property="departmentName"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+    
+    <sql id="Base_Column_List">
+        t.id, t.teacher_no, t.real_name, t.gender, t.phone, t.email, t.department_id, t.user_id, u.status, d.dept_name as department_name, t.create_time, t.update_time, t.deleted
+    </sql>
+    
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM teacher t
+        LEFT JOIN sys_user u ON t.user_id = u.id
+        LEFT JOIN department d ON t.department_id = d.id
+        WHERE t.id = #{id}
+    </select>
+    
+    <select id="selectByUserId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM teacher t
+        LEFT JOIN sys_user u ON t.user_id = u.id
+        LEFT JOIN department d ON t.department_id = d.id
+        WHERE t.user_id = #{userId} AND t.deleted = 0
+    </select>
+    
+    <select id="selectList" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM teacher t
+        LEFT JOIN sys_user u ON t.user_id = u.id
+        LEFT JOIN department d ON t.department_id = d.id
+        WHERE 1=1
+        <if test="teacherNo != null and teacherNo != ''">
+            AND t.teacher_no LIKE CONCAT('%', #{teacherNo}, '%')
+        </if>
+        <if test="realName != null and realName != ''">
+            AND t.real_name LIKE CONCAT('%', #{realName}, '%')
+        </if>
+        <if test="departmentId != null">
+            AND t.department_id = #{departmentId}
+        </if>
+        ORDER BY t.create_time DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+    
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO teacher (teacher_no, real_name, gender, phone, email, department_id, user_id, status)
+        VALUES (#{teacherNo}, #{realName}, #{gender}, #{phone}, #{email}, #{departmentId}, #{userId}, #{status})
+    </insert>
+    
+    <update id="updateById">
+        UPDATE teacher
+        <set>
+            <if test="teacherNo != null">teacher_no = #{teacherNo},</if>
+            <if test="realName != null">real_name = #{realName},</if>
+            <if test="gender != null">gender = #{gender},</if>
+            <if test="phone != null">phone = #{phone},</if>
+            <if test="email != null">email = #{email},</if>
+            <if test="departmentId != null">department_id = #{departmentId},</if>
+            <if test="userId != null">user_id = #{userId},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+    
+    <update id="deleteById">
+        DELETE FROM teacher WHERE id = #{id}
+    </update>
+    
+    <select id="count" resultType="int">
+        SELECT COUNT(*)
+        FROM teacher t
+        WHERE 1=1
+        <if test="teacherNo != null and teacherNo != ''">
+            AND t.teacher_no LIKE CONCAT('%', #{teacherNo}, '%')
+        </if>
+        <if test="realName != null and realName != ''">
+            AND t.real_name LIKE CONCAT('%', #{realName}, '%')
+        </if>
+        <if test="departmentId != null">
+            AND t.department_id = #{departmentId}
+        </if>
+    </select>
+    
+    <select id="countByMonth" resultType="int">
+        SELECT COUNT(*) FROM teacher 
+        WHERE YEAR(create_time) = #{year} 
+        AND MONTH(create_time) = #{month}
+    </select>
+    
+    <select id="countParticipants" resultType="int">
+        SELECT COUNT(DISTINCT student_id) FROM exam_record
+    </select>
+    <update id="deleteByUserId">
+        DELETE FROM teacher WHERE user_id = #{userId}
+    </update>
+    
+    <select id="selectByTeacherNo" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM teacher t
+        LEFT JOIN sys_user u ON t.user_id = u.id
+        LEFT JOIN department d ON t.department_id = d.id
+        WHERE t.teacher_no = #{teacherNo}
+    </select>
+    
+    <!-- 根据教师ID查询授课班级数量 -->
+    <select id="countClassesByTeacherId" resultType="int">
+        SELECT COUNT(DISTINCT class_id) 
+        FROM teacher_class 
+        WHERE teacher_id = #{teacherId}
+    </select>
+    
+    <!-- 根据教师ID查询覆盖学生数量 -->
+    <select id="countStudentsByTeacherId" resultType="int">
+        SELECT COUNT(DISTINCT s.id) 
+        FROM teacher_class tc
+        LEFT JOIN class_info c ON tc.class_id = c.id
+        LEFT JOIN student s ON s.class_id = c.id
+        WHERE tc.teacher_id = #{teacherId}
+    </select>
+    
+</mapper>

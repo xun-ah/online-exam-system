@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.exam.mapper.StudentMapper">
+    
+    <resultMap id="BaseResultMap" type="com.exam.entity.Student">
+        <id column="id" property="id"/>
+        <result column="student_no" property="studentNo"/>
+        <result column="real_name" property="realName"/>
+        <result column="gender" property="gender"/>
+        <result column="phone" property="phone"/>
+        <result column="email" property="email"/>
+        <result column="class_id" property="classId"/>
+        <result column="department_id" property="departmentId"/>
+        <result column="user_id" property="userId"/>
+        <result column="status" property="status"/>
+        <result column="className" property="className"/>
+        <result column="departmentName" property="departmentName"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+    
+    <sql id="Base_Column_List">
+        s.id, s.student_no, s.real_name, s.gender, s.phone, s.email, s.class_id, s.department_id, s.user_id, u.status, s.create_time, s.update_time, s.deleted
+    </sql>
+    
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM student s
+        LEFT JOIN sys_user u ON s.user_id = u.id
+        WHERE s.id = #{id}
+    </select>
+    
+    <select id="selectList" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>,
+               ci.class_name as className,
+               d.dept_name as departmentName
+        FROM student s
+        LEFT JOIN sys_user u ON s.user_id = u.id
+        LEFT JOIN class_info ci ON s.class_id = ci.id
+        LEFT JOIN department d ON s.department_id = d.id
+        WHERE 1=1
+        <if test="studentNo != null and studentNo != ''">
+            AND s.student_no LIKE CONCAT('%', #{studentNo}, '%')
+        </if>
+        <if test="realName != null and realName != ''">
+            AND s.real_name LIKE CONCAT('%', #{realName}, '%')
+        </if>
+        <if test="classId != null">
+            AND s.class_id = #{classId}
+        </if>
+        <if test="departmentId != null">
+            AND s.department_id = #{departmentId}
+        </if>
+        ORDER BY s.create_time DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+    
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO student (student_no, real_name, gender, phone, email, class_id, department_id, user_id)
+        VALUES (#{studentNo}, #{realName}, #{gender}, #{phone}, #{email}, #{classId}, #{departmentId}, #{userId})
+    </insert>
+    
+    <update id="updateById">
+        UPDATE student
+        <set>
+            <if test="studentNo != null">student_no = #{studentNo},</if>
+            <if test="realName != null">real_name = #{realName},</if>
+            <if test="gender != null">gender = #{gender},</if>
+            <if test="phone != null">phone = #{phone},</if>
+            <if test="email != null">email = #{email},</if>
+            <if test="classId != null">class_id = #{classId},</if>
+            <if test="departmentId != null">department_id = #{departmentId},</if>
+            <if test="userId != null">user_id = #{userId},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+    
+    <delete id="deleteById">
+        DELETE FROM student WHERE id = #{id}
+    </delete>
+    
+    <select id="count" resultType="int">
+        SELECT COUNT(*)
+        FROM student s
+        WHERE 1=1
+        <if test="studentNo != null and studentNo != ''">
+            AND s.student_no LIKE CONCAT('%', #{studentNo}, '%')
+        </if>
+        <if test="realName != null and realName != ''">
+            AND s.real_name LIKE CONCAT('%', #{realName}, '%')
+        </if>
+        <if test="classId != null">
+            AND s.class_id = #{classId}
+        </if>
+        <if test="departmentId != null">
+            AND s.department_id = #{departmentId}
+        </if>
+    </select>
+    
+    <select id="countByMonth" resultType="int">
+        SELECT COUNT(*) FROM student 
+        WHERE YEAR(create_time) = #{year} 
+        AND MONTH(create_time) = #{month}
+    </select>
+    
+</mapper>

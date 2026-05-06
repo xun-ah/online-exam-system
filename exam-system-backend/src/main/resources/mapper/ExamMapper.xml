@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.exam.mapper.ExamMapper">
+    
+    <resultMap id="BaseResultMap" type="com.exam.entity.Exam">
+        <id column="id" property="id"/>
+        <result column="exam_name" property="examName"/>
+        <result column="paper_id" property="paperId"/>
+        <result column="teacher_id" property="teacherId"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="duration" property="duration"/>
+        <result column="class_id" property="classId"/>
+        <result column="status" property="status"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+    
+    <resultMap id="DetailResultMap" type="com.exam.entity.Exam" extends="BaseResultMap">
+        <result column="paper_name" property="paperName"/>
+        <result column="class_name" property="className"/>
+    </resultMap>
+    
+    <sql id="Base_Column_List">
+        id, exam_name, paper_id, teacher_id, start_time, end_time, duration, class_id, status, create_time, update_time, deleted
+    </sql>
+    
+    <select id="selectById" resultMap="DetailResultMap">
+        SELECT e.id, e.exam_name, e.paper_id, e.teacher_id, e.start_time, e.end_time, e.duration, e.class_id, e.status,
+               p.paper_name, ci.class_name
+        FROM exam e
+        LEFT JOIN paper p ON e.paper_id = p.id
+        LEFT JOIN class_info ci ON e.class_id = ci.id
+        WHERE e.id = #{id}
+    </select>
+    
+    <select id="selectList" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM exam
+        WHERE 1=1
+        <if test="teacherId != null">
+            AND teacher_id = #{teacherId}
+        </if>
+        <if test="classId != null">
+            AND class_id = #{classId}
+        </if>
+        <if test="status != null">
+            AND status = #{status}
+        </if>
+        ORDER BY create_time DESC
+    </select>
+    
+    <!-- 根据院系ID查询考试列表（通过班级关联院系） -->
+    <select id="selectListByDepartmentId" resultMap="BaseResultMap">
+        SELECT DISTINCT e.id, e.exam_name, e.paper_id, e.teacher_id, e.start_time, e.end_time, 
+               e.duration, e.class_id, e.status, e.create_time, e.update_time, e.deleted
+        FROM exam e
+        INNER JOIN class_info ci ON e.class_id = ci.id
+        WHERE ci.department_id = #{departmentId}
+        ORDER BY e.create_time DESC
+    </select>
+    
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO exam (exam_name, paper_id, teacher_id, start_time, end_time, duration, class_id, status)
+        VALUES (#{examName}, #{paperId}, #{teacherId}, #{startTime}, #{endTime}, #{duration}, #{classId}, #{status})
+    </insert>
+    
+    <update id="updateById">
+        UPDATE exam
+        <set>
+            <if test="examName != null">exam_name = #{examName},</if>
+            <if test="paperId != null">paper_id = #{paperId},</if>
+            <if test="teacherId != null">teacher_id = #{teacherId},</if>
+            <if test="startTime != null">start_time = #{startTime},</if>
+            <if test="endTime != null">end_time = #{endTime},</if>
+            <if test="duration != null">duration = #{duration},</if>
+            <if test="classId != null">class_id = #{classId},</if>
+            <if test="status != null">status = #{status},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+    
+    <delete id="deleteById">
+        DELETE FROM exam WHERE id = #{id}
+    </delete>
+    
+    <select id="count" resultType="int">
+        SELECT COUNT(*) FROM exam WHERE 1=1
+    </select>
+    
+    <select id="countByMonth" resultType="int">
+        SELECT COUNT(*) FROM exam 
+        WHERE YEAR(start_time) = #{year} 
+        AND MONTH(start_time) = #{month}
+    </select>
+
+    <select id="countByTeacherId" resultType="int">
+        SELECT COUNT(*) FROM exam 
+        WHERE 1=1
+        <if test="teacherId != null">
+            AND teacher_id = #{teacherId}
+        </if>
+    </select>
+
+    <select id="countOngoingByTeacherId" resultType="int">
+        SELECT COUNT(*) FROM exam WHERE status = 1
+        <if test="teacherId != null">
+            AND teacher_id = #{teacherId}
+        </if>
+    </select>
+    
+</mapper>

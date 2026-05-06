@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.exam.mapper.TeacherClassMapper">
+
+    <resultMap id="BaseResultMap" type="com.exam.entity.TeacherClass">
+        <id column="id" property="id"/>
+        <result column="teacher_id" property="teacherId"/>
+        <result column="class_id" property="classId"/>
+        <result column="subject_id" property="subjectId"/>
+        <result column="subject" property="subject"/>
+        <result column="class_name" property="className"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        tc.id, tc.teacher_id, tc.class_id, tc.subject_id, s.name as subject, c.class_name, tc.create_time
+    </sql>
+
+    <select id="selectByTeacherId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM teacher_class tc
+        LEFT JOIN class_info c ON tc.class_id = c.id
+        LEFT JOIN subject s ON tc.subject_id = s.id
+        WHERE tc.teacher_id = #{teacherId}
+        ORDER BY tc.create_time DESC
+    </select>
+
+    <select id="selectByClassId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM teacher_class tc
+        LEFT JOIN class_info c ON tc.class_id = c.id
+        LEFT JOIN subject s ON tc.subject_id = s.id
+        WHERE tc.class_id = #{classId}
+        ORDER BY tc.create_time DESC
+    </select>
+
+    <select id="selectByTeacherAndClass" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM teacher_class tc
+        LEFT JOIN class_info c ON tc.class_id = c.id
+        LEFT JOIN subject s ON tc.subject_id = s.id
+        WHERE tc.teacher_id = #{teacherId} AND tc.class_id = #{classId}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO teacher_class (teacher_id, class_id, subject_id, subject)
+        VALUES (#{teacherId}, #{classId}, #{subjectId}, #{subject})
+    </insert>
+
+    <insert id="batchInsert">
+        INSERT INTO teacher_class (teacher_id, class_id, subject_id, subject)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.teacherId}, #{item.classId}, #{item.subjectId}, #{item.subject})
+        </foreach>
+    </insert>
+
+    <delete id="deleteById">
+        DELETE FROM teacher_class WHERE id = #{id}
+    </delete>
+
+    <delete id="deleteByTeacherId">
+        DELETE FROM teacher_class WHERE teacher_id = #{teacherId}
+    </delete>
+
+    <delete id="deleteByClassId">
+        DELETE FROM teacher_class WHERE class_id = #{classId}
+    </delete>
+
+</mapper>

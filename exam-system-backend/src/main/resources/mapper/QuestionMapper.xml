@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.exam.mapper.QuestionMapper">
+    
+    <resultMap id="BaseResultMap" type="com.exam.entity.Question">
+        <id column="id" property="id"/>
+        <result column="question_no" property="questionNo"/>
+        <result column="content" property="content"/>
+        <result column="type" property="type"/>
+        <result column="difficulty" property="difficulty"/>
+        <result column="score" property="score"/>
+        <result column="teacher_id" property="teacherId"/>
+        <result column="subject" property="subject"/>
+        <result column="answer" property="answer"/>
+        <result column="analysis" property="analysis"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+    
+    <sql id="Base_Column_List">
+        id, question_no, content, type, difficulty, score, teacher_id, subject,
+        answer, analysis, create_time, update_time, deleted
+    </sql>
+    
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM question
+        WHERE id = #{id}
+    </select>
+    
+    <select id="selectList" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM question
+        WHERE deleted = 0
+        <if test="teacherId != null">
+            AND teacher_id = #{teacherId}
+        </if>
+        <if test="type != null">
+            AND type = #{type}
+        </if>
+        <if test="difficulty != null">
+            AND difficulty = #{difficulty}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND content LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+        <if test="subject != null and subject != ''">
+            AND subject = #{subject}
+        </if>
+        ORDER BY create_time DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+    
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO question (question_no, content, type, difficulty, score, teacher_id, subject,
+                             answer, analysis)
+        VALUES (#{questionNo}, #{content}, #{type}, #{difficulty}, #{score}, #{teacherId}, #{subject},
+                #{answer}, #{analysis})
+    </insert>
+    
+    <update id="updateById">
+        UPDATE question
+        <set>
+            <if test="questionNo != null">question_no = #{questionNo},</if>
+            <if test="content != null">content = #{content},</if>
+            <if test="type != null">type = #{type},</if>
+            <if test="difficulty != null">difficulty = #{difficulty},</if>
+            <if test="score != null">score = #{score},</if>
+            <if test="subject != null">subject = #{subject},</if>
+            <if test="answer != null">answer = #{answer},</if>
+            <if test="analysis != null">analysis = #{analysis},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+    
+    <delete id="deleteById">
+        DELETE FROM question WHERE id = #{id}
+    </delete>
+    
+    <select id="count" resultType="int">
+        SELECT COUNT(*) FROM question WHERE deleted = 0
+        <if test="teacherId != null">
+            AND teacher_id = #{teacherId}
+        </if>
+        <if test="type != null">
+            AND type = #{type}
+        </if>
+        <if test="difficulty != null">
+            AND difficulty = #{difficulty}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND content LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+        <if test="subject != null and subject != ''">
+            AND subject = #{subject}
+        </if>
+    </select>
+
+    <select id="countByTeacherId" resultType="int">
+        SELECT COUNT(*) FROM question 
+        WHERE deleted = 0
+        <if test="teacherId != null">
+            AND teacher_id = #{teacherId}
+        </if>
+    </select>
+    
+</mapper>

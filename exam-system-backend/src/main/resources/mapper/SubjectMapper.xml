@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.exam.mapper.SubjectMapper">
+    
+    <resultMap id="BaseResultMap" type="com.exam.entity.Subject">
+        <id column="id" property="id"/>
+        <result column="department_id" property="departmentId"/>
+        <result column="name" property="name"/>
+        <result column="code" property="code"/>
+        <result column="description" property="description"/>
+        <result column="credits" property="credits"/>
+        <result column="department_name" property="departmentName"/>
+        <result column="status" property="status"/>
+        <result column="sort_order" property="sortOrder"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, department_id, name, code, description, credits, status, sort_order, create_time, update_time, deleted
+    </sql>
+
+    <!-- 查询所有启用的科目列表 -->
+    <select id="selectActiveList" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM subject
+        WHERE deleted = 0 AND status = 1
+        <if test="departmentId != null">AND department_id = #{departmentId}</if>
+        ORDER BY sort_order ASC, id ASC
+    </select>
+
+    <!-- 根据ID查询科目 -->
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM subject
+        WHERE id = #{id} AND deleted = 0
+    </select>
+
+    <!-- 查询所有科目 -->
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM subject
+        WHERE deleted = 0
+        ORDER BY sort_order ASC, id ASC
+    </select>
+
+    <!-- 新增科目 -->
+    <insert id="insert" parameterType="com.exam.entity.Subject" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO subject (name, code, description, credits, department_id, status, sort_order)
+        VALUES (#{name}, #{code}, #{description}, #{credits}, #{departmentId}, #{status}, #{sortOrder})
+    </insert>
+
+    <!-- 更新科目 -->
+    <update id="update" parameterType="com.exam.entity.Subject">
+        UPDATE subject
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="code != null">code = #{code},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="credits != null">credits = #{credits},</if>
+            <if test="departmentId != null">department_id = #{departmentId},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="sortOrder != null">sort_order = #{sortOrder},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <!-- 删除科目（物理删除） -->
+    <delete id="deleteById">
+        DELETE FROM subject WHERE id = #{id}
+    </delete>
+    
+    <!-- 管理员分页查询科目列表 -->
+    <select id="selectList" resultMap="BaseResultMap">
+        SELECT s.id, s.department_id, s.name, s.code, s.description, s.credits, s.status, s.sort_order, s.create_time, s.update_time, s.deleted, d.dept_name as department_name
+        FROM subject s
+        LEFT JOIN department d ON s.department_id = d.id
+        WHERE s.deleted = 0
+        <if test="name != null and name != ''">
+            AND s.name LIKE CONCAT('%', #{name}, '%')
+        </if>
+        <if test="departmentId != null">
+            AND s.department_id = #{departmentId}
+        </if>
+        ORDER BY s.sort_order ASC, s.id ASC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+    
+    <!-- 统计科目数量 -->
+    <select id="count" resultType="int">
+        SELECT COUNT(*)
+        FROM subject
+        WHERE deleted = 0
+        <if test="name != null and name != ''">
+            AND name LIKE CONCAT('%', #{name}, '%')
+        </if>
+        <if test="departmentId != null">
+            AND department_id = #{departmentId}
+        </if>
+    </select>
+
+</mapper>

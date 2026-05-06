@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.exam.mapper.PaperMapper">
+    
+    <resultMap id="BaseResultMap" type="com.exam.entity.Paper">
+        <id column="id" property="id"/>
+        <result column="paper_name" property="paperName"/>
+        <result column="paper_no" property="paperNo"/>
+        <result column="total_score" property="totalScore"/>
+        <result column="duration" property="duration"/>
+        <result column="teacher_id" property="teacherId"/>
+        <result column="description" property="description"/>
+        <result column="subject" property="subject"/>
+        <result column="difficulty" property="difficulty"/>
+        <result column="status" property="status"/>
+        <result column="question_config" property="questionConfig"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+    
+    <sql id="Base_Column_List">
+        id, paper_name, paper_no, total_score, duration, teacher_id, 
+        description, subject, difficulty, status, question_config,
+        create_time, update_time, deleted
+    </sql>
+    
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM paper
+        WHERE id = #{id}
+    </select>
+    
+    <select id="selectList" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM paper
+        WHERE 1=1
+        <if test="teacherId != null">
+            AND teacher_id = #{teacherId}
+        </if>
+        ORDER BY create_time DESC
+    </select>
+    
+    <!-- 根据院系ID查询试卷列表（通过教师关联院系） -->
+    <select id="selectListByDepartmentId" resultMap="BaseResultMap">
+        SELECT DISTINCT p.id, p.paper_name, p.paper_no, p.total_score, p.duration, p.teacher_id, 
+               p.description, p.subject, p.difficulty, p.status, p.question_config,
+               p.create_time, p.update_time, p.deleted
+        FROM paper p
+        INNER JOIN teacher t ON p.teacher_id = t.user_id
+        WHERE t.department_id = #{departmentId}
+        ORDER BY p.create_time DESC
+    </select>
+    
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO paper (paper_name, paper_no, total_score, duration, teacher_id, 
+                          description, subject, difficulty, status, question_config)
+        VALUES (#{paperName}, #{paperNo}, #{totalScore}, #{duration}, #{teacherId},
+                #{description}, #{subject}, #{difficulty}, #{status}, #{questionConfig})
+    </insert>
+    
+    <update id="updateById">
+        UPDATE paper
+        <set>
+            <if test="paperName != null">paper_name = #{paperName},</if>
+            <if test="paperNo != null">paper_no = #{paperNo},</if>
+            <if test="totalScore != null">total_score = #{totalScore},</if>
+            <if test="duration != null">duration = #{duration},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="subject != null">subject = #{subject},</if>
+            <if test="difficulty != null">difficulty = #{difficulty},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="questionConfig != null">question_config = #{questionConfig},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+    
+    <delete id="deleteById">
+        DELETE FROM paper WHERE id = #{id}
+    </delete>
+
+    <select id="countByTeacherId" resultType="int">
+        SELECT COUNT(*) FROM paper 
+        WHERE 1=1
+        <if test="teacherId != null">
+            AND teacher_id = #{teacherId}
+        </if>
+    </select>
+    
+</mapper>

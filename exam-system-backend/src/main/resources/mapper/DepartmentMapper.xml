@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.exam.mapper.DepartmentMapper">
+    
+    <resultMap id="BaseResultMap" type="com.exam.entity.Department">
+        <id column="id" property="id"/>
+        <result column="dept_name" property="deptName"/>
+        <result column="dept_code" property="deptCode"/>
+        <result column="description" property="description"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+        <!-- 前端兼容字段映射 -->
+        <result column="name" property="name"/>
+        <result column="code" property="code"/>
+    </resultMap>
+    
+    <sql id="Base_Column_List">
+        id, dept_name, dept_code, description, create_time, update_time, deleted
+    </sql>
+    
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM department
+        WHERE id = #{id}
+    </select>
+    
+    <select id="selectList" resultMap="BaseResultMap">
+        SELECT DISTINCT id, dept_name, dept_code, description, create_time, update_time, deleted,
+               dept_name as name, dept_code as code
+        FROM department
+        WHERE 1=1
+        ORDER BY create_time DESC
+    </select>
+    
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO department (dept_name, dept_code, description)
+        VALUES (#{deptName}, #{deptCode}, #{description})
+    </insert>
+    
+    <update id="updateById">
+        UPDATE department
+        <set>
+            <if test="deptName != null">dept_name = #{deptName},</if>
+            <if test="deptCode != null">dept_code = #{deptCode},</if>
+            <if test="description != null">description = #{description},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+    
+    <delete id="deleteById">
+        DELETE FROM department WHERE id = #{id}
+    </delete>
+    
+</mapper>
