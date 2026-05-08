@@ -4,8 +4,11 @@ import com.exam.annotation.SysLog;
 import com.exam.common.PageResult;
 import com.exam.common.Result;
 import com.exam.entity.Exam;
+import com.exam.entity.ExamRecord;
 import com.exam.entity.Teacher;
 import com.exam.entity.TeacherClass;
+import com.exam.mapper.ExamRecordMapper;
+import com.exam.mapper.StudentMapper;
 import com.exam.mapper.TeacherMapper;
 import com.exam.service.ExamService;
 import com.exam.service.TeacherClassService;
@@ -16,6 +19,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/teacher/exams")
@@ -30,12 +34,18 @@ public class TeacherExamController {
     @Autowired
     private TeacherMapper teacherMapper;
     
+    @Autowired
+    private ExamRecordMapper examRecordMapper;
+    
+    @Autowired
+    private StudentMapper studentMapper;
+    
     /**
      * 获取考试列表（只返回本院系的考试）
      */
     @SysLog("查询考试列表")
     @GetMapping
-    public Result<PageResult<Exam>> getExamList(
+    public Result<List<Map<String, Object>>> getExamList(
             @RequestParam(required = false) Long classId,
             @RequestParam(required = false) Integer status,
             @RequestParam(defaultValue = "1") int pageNum,
@@ -48,7 +58,36 @@ public class TeacherExamController {
         }
         
         PageResult<Exam> result = examService.getExamListByDepartment(teacher.getDepartmentId(), pageNum, pageSize);
-        return Result.success(result);
+        
+        // 为每个考试添加统计信息
+        List<Map<String, Object>> examList = result.getRecords().stream()
+            .map(exam -> {
+                Map<String, Object> examData = new HashMap<>();
+                examData.put("id", exam.getId());
+                examData.put("examName", exam.getExamName());
+                examData.put("className", exam.getClassName());
+                examData.put("paperName", exam.getPaperName());
+                examData.put("startTime", exam.getStartTime());
+                examData.put("endTime", exam.getEndTime());
+                examData.put("duration", exam.getDuration());
+                examData.put("status", exam.getStatus());
+                
+                // 统计已完成人数（status >= 1）
+                List<ExamRecord> records = examRecordMapper.selectList(exam.getId(), null);
+                long completedCount = records.stream()
+                    .filter(r -> r.getStatus() != null && r.getStatus() >= 1)
+                    .count();
+                examData.put("participantCount", completedCount);
+                
+                // 统计班级总人数
+                int totalCount = studentMapper.count(null, null, exam.getClassId(), teacher.getDepartmentId());
+                examData.put("totalCount", totalCount);
+                
+                return examData;
+            })
+            .collect(Collectors.toList());
+        
+        return Result.success(examList);
     }
     
     /**
@@ -114,7 +153,19 @@ public class TeacherExamController {
         }
         
         List<TeacherClass> classes = teacherClassService.getClassesByTeacherId(teacher.getId());
-        return Result.success(classes);
+        
+        // 按班级ID去重，保留每个班级的一条记录
+        List<TeacherClass> distinctClasses = classes.stream()
+            .collect(Collectors.toMap(
+                TeacherClass::getClassId, 
+                c -> c, 
+                (existing, replacement) -> existing
+            ))
+            .values()
+            .stream()
+            .collect(Collectors.toList());
+        
+        return Result.success(distinctClasses);
     }
     
     /**

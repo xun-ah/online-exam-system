@@ -47,8 +47,15 @@ public class AuthController {
         String captcha = loginData.get("captcha");
         String roleStr = loginData.get("role");
         
-        // 验证验证码
+        // 调试日志
+        System.out.println("=== 登录请求调试 ===");
+        System.out.println("Session ID: " + session.getId());
+        System.out.println("用户输入的验证码: " + captcha);
         String sessionCaptcha = (String) session.getAttribute("captcha");
+        System.out.println("Session中的验证码: " + sessionCaptcha);
+        System.out.println("===================");
+        
+        // 验证验证码
         if (sessionCaptcha == null || !sessionCaptcha.equalsIgnoreCase(captcha)) {
             return Result.error("验证码错误");
         }

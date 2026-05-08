@@ -26,6 +26,9 @@
         <el-button type="success" @click="handleAdd">
           <el-icon><Plus /></el-icon>新增学生
         </el-button>
+        <el-button type="primary" @click="showImportDialog = true">
+          <el-icon><Upload /></el-icon>Excel导入
+        </el-button>
       </div>
       
       <!-- 表格 -->
@@ -113,13 +116,56 @@
         <el-button type="primary" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
+    
+    <!-- Excel导入对话框 -->
+    <el-dialog v-model="showImportDialog" title="Excel导入学生" width="500px">
+      <div class="import-content">
+        <el-alert title="导入说明" type="info" :closable="false" style="margin-bottom: 20px;">
+          <template #default>
+            <p style="margin: 0;">1. 请按照模板格式填写数据</p>
+            <p style="margin: 4px 0 0 0;">2. 必填字段：学号、姓名、性别、手机号</p>
+            <p style="margin: 4px 0 0 0;">3. 默认密码：123456</p>
+          </template>
+        </el-alert>
+        
+        <el-button type="primary" @click="downloadTemplate" size="small" style="margin-bottom: 20px;">
+          下载导入模板
+        </el-button>
+        
+        <el-upload
+          ref="uploadRef"
+          :action="uploadUrl"
+          :headers="uploadHeaders"
+          :on-success="handleUploadSuccess"
+          :on-error="handleUploadError"
+          :before-upload="beforeUpload"
+          accept=".xlsx,.xls"
+          :limit="1"
+          drag
+        >
+          <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+          <div class="el-upload__text">
+            拖拽文件到此处或<em>点击上传</em>
+          </div>
+          <template #tip>
+            <div class="el-upload__tip">
+              只能上传 xlsx/xls 文件
+            </div>
+          </template>
+        </el-upload>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Upload, UploadFilled } from '@element-plus/icons-vue'
 import { getStudentList, createStudent, updateStudent, deleteStudent, getDepartmentList, getClassList } from '@/api/admin/index'
+import { useUserStore } from '@/store/user'
+
+const userStore = useUserStore()
 
 const loading = ref(false)
 const tableData = ref([])
@@ -130,6 +176,19 @@ const isEdit = ref(false)
 const formRef = ref(null)
 const departmentList = ref([])
 const classList = ref([])
+const showImportDialog = ref(false)
+const uploadRef = ref(null)
+
+// 上传配置
+const uploadUrl = computed(() => {
+  return `${import.meta.env.VITE_API_BASE_URL}/admin/students/import`
+})
+
+const uploadHeaders = computed(() => {
+  return {
+    'Authorization': 'Bearer ' + userStore.token
+  }
+})
 
 const queryParams = reactive({
   studentNo: '',
@@ -289,6 +348,44 @@ const handleSubmit = async () => {
   } catch (error) {
     console.error('提交失败:', error)
   }
+}
+
+// 下载导入模板
+const downloadTemplate = () => {
+  window.open(`${import.meta.env.VITE_API_BASE_URL}/admin/students/template`, '_blank')
+}
+
+// 上传前校验
+const beforeUpload = (file) => {
+  const isExcel = file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
+                  file.type === 'application/vnd.ms-excel'
+  if (!isExcel) {
+    ElMessage.error('只能上传 Excel 文件!')
+    return false
+  }
+  const isLt10M = file.size / 1024 / 1024 < 10
+  if (!isLt10M) {
+    ElMessage.error('文件大小不能超过 10MB!')
+    return false
+  }
+  return true
+}
+
+// 上传成功
+const handleUploadSuccess = (response) => {
+  if (response.code === 200) {
+    ElMessage.success('导入成功！')
+    showImportDialog.value = false
+    fetchData()
+  } else {
+    ElMessage.error(response.message || '导入失败')
+  }
+}
+
+// 上传失败
+const handleUploadError = (error) => {
+  console.error('上传失败:', error)
+  ElMessage.error('导入失败，请检查文件格式')
 }
 
 onMounted(() => {

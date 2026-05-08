@@ -10,6 +10,11 @@ public interface StudentMapper {
     
     Student selectById(@Param("id") Long id);
     
+    /**
+     * 根据userId查询学生信息
+     */
+    Student selectByUserId(@Param("userId") Long userId);
+    
     List<Student> selectList(@Param("studentNo") String studentNo,
                              @Param("realName") String realName,
                              @Param("classId") Long classId,

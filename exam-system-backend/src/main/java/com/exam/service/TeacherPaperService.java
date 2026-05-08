@@ -75,8 +75,11 @@ public class TeacherPaperService {
      * 创建试卷
      */
     public void createPaper(Paper paper, Long userId) {
-        // TODO: 根据userId获取teacherId
-        // paper.setTeacherId(teacherId);
+        // 根据userId获取教师信息
+        Teacher teacher = teacherMapper.selectByUserId(userId);
+        if (teacher != null) {
+            paper.setTeacherId(teacher.getId());
+        }
         paperMapper.insert(paper);
     }
     

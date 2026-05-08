@@ -257,8 +257,15 @@ const fetchExams = async () => {
       pageSize: pagination.pageSize
     })
     if (res.data) {
-      examList.value = res.data.records || []
-      total.value = res.data.total || 0
+      // 后端直接返回数组
+      if (Array.isArray(res.data)) {
+        examList.value = res.data
+        total.value = res.data.length
+      } else {
+        // 兼容旧的PageResult格式
+        examList.value = res.data.records || []
+        total.value = res.data.total || 0
+      }
     }
   } catch (error) {
     console.error('获取考试列表失败:', error)

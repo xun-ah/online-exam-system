@@ -31,6 +31,17 @@
         WHERE s.id = #{id}
     </select>
     
+    <select id="selectByUserId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>,
+               ci.class_name as className,
+               d.dept_name as departmentName
+        FROM student s
+        LEFT JOIN sys_user u ON s.user_id = u.id
+        LEFT JOIN class_info ci ON s.class_id = ci.id
+        LEFT JOIN department d ON s.department_id = d.id
+        WHERE s.user_id = #{userId}
+    </select>
+    
     <select id="selectList" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>,
                ci.class_name as className,

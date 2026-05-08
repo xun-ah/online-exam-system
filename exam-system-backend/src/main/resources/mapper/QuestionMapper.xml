@@ -13,6 +13,7 @@
         <result column="subject" property="subject"/>
         <result column="answer" property="answer"/>
         <result column="analysis" property="analysis"/>
+        <result column="options" property="options"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
         <result column="deleted" property="deleted"/>
@@ -20,7 +21,7 @@
     
     <sql id="Base_Column_List">
         id, question_no, content, type, difficulty, score, teacher_id, subject,
-        answer, analysis, create_time, update_time, deleted
+        answer, analysis, options, create_time, update_time, deleted
     </sql>
     
     <select id="selectById" resultMap="BaseResultMap">
@@ -54,9 +55,9 @@
     
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO question (question_no, content, type, difficulty, score, teacher_id, subject,
-                             answer, analysis)
+                             answer, analysis, options)
         VALUES (#{questionNo}, #{content}, #{type}, #{difficulty}, #{score}, #{teacherId}, #{subject},
-                #{answer}, #{analysis})
+                #{answer}, #{analysis}, #{options})
     </insert>
     
     <update id="updateById">
@@ -70,6 +71,7 @@
             <if test="subject != null">subject = #{subject},</if>
             <if test="answer != null">answer = #{answer},</if>
             <if test="analysis != null">analysis = #{analysis},</if>
+            <if test="options != null">options = #{options},</if>
         </set>
         WHERE id = #{id}
     </update>

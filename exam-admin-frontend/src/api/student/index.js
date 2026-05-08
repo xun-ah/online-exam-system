@@ -29,20 +29,21 @@ export function startExam(examId) {
   })
 }
 
-// 提交答案
+// 保存答案
 export function submitAnswer(data) {
   return request({
-    url: '/student/exams/submit-answer',
+    url: '/student/exams/save-answer',
     method: 'post',
     data
   })
 }
 
-// 交卷
-export function submitExam(examId) {
+// 提交试卷
+export function submitExam(examId, data) {
   return request({
     url: `/student/exams/${examId}/submit`,
-    method: 'post'
+    method: 'post',
+    data
   })
 }
 
@@ -98,7 +99,7 @@ export function getScoreList(params) {
 // 获取成绩趋势分析
 export function getScoreTrend() {
   return request({
-    url: '/student/scores/trend',
+    url: '/student/score/trend',
     method: 'get'
   })
 }

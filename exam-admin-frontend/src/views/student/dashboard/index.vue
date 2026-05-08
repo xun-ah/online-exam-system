@@ -36,7 +36,7 @@
 
     <!-- 主内容区 -->
     <div class="main-content">
-      <!-- 左侧：待考考试 -->
+      <!-- 左侧：待考考试和最近考试 -->
       <div class="left-section">
         <div class="section-card">
           <h3 class="section-title">待考考试</h3>
@@ -62,27 +62,17 @@
               </div>
               <div class="exam-action">
                 <el-button 
-                  v-if="canEnterExam(exam)" 
+                  v-if="getExamStatus(exam) === '进行中'" 
                   type="primary" 
                   @click="enterExam(exam)"
                 >
                   进入考场
                 </el-button>
-                <el-button v-else disabled>未开始</el-button>
+                <el-tag v-else :type="getExamStatusType(exam)" size="small">
+                  {{ getExamStatus(exam) }}
+                </el-tag>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 右侧：成绩趋势和最近考试 -->
-      <div class="right-section">
-        <!-- 成绩趋势图 -->
-        <div class="section-card">
-          <h3 class="section-title">成绩趋势</h3>
-          <div class="chart-container">
-            <v-chart v-if="scoreTrend.length > 0" class="chart" :option="chartOption" autoresize />
-            <el-empty v-else description="暂无考试数据" />
           </div>
         </div>
 
@@ -99,6 +89,18 @@
                 {{ record.score }}分
               </span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧：成绩趋势 -->
+      <div class="right-section">
+        <!-- 成绩趋势图 -->
+        <div class="section-card">
+          <h3 class="section-title">成绩趋势</h3>
+          <div class="chart-container">
+            <v-chart v-if="scoreTrend.length > 0" class="chart" :option="chartOption" autoresize />
+            <el-empty v-else description="暂无考试数据" />
           </div>
         </div>
       </div>
@@ -155,7 +157,8 @@ const chartOption = computed(() => ({
   grid: {
     left: '3%',
     right: '4%',
-    bottom: '3%',
+    bottom: '15%',
+    top: '10%',
     containLabel: true
   },
   xAxis: {
@@ -206,12 +209,32 @@ const formatDateTime = (dateTime) => {
   return `${year}-${month}-${day} ${hours}:${minutes}`
 }
 
+// 获取考试状态
+const getExamStatus = (exam) => {
+  const now = new Date().getTime()
+  const startTime = new Date(exam.startTime).getTime()
+  const endTime = startTime + exam.duration * 60000
+  
+  if (now < startTime) {
+    return '未开始'
+  } else if (now >= startTime && now <= endTime) {
+    return '进行中'
+  } else {
+    return '已结束'
+  }
+}
+
+// 获取考试状态类型（用于Tag颜色）
+const getExamStatusType = (exam) => {
+  const status = getExamStatus(exam)
+  if (status === '未开始') return 'info'
+  if (status === '进行中') return 'success'
+  return 'danger'
+}
+
 // 判断是否可以进入考试
 const canEnterExam = (exam) => {
-  const now = new Date()
-  const startTime = new Date(exam.startTime)
-  const endTime = new Date(startTime.getTime() + exam.duration * 60000)
-  return now >= startTime && now <= endTime
+  return getExamStatus(exam) === '进行中'
 }
 
 // 进入考试
@@ -473,7 +496,7 @@ onMounted(() => {
 }
 
 .chart-container {
-  height: 300px;
+  height: 500px;
 
   .chart {
     width: 100%;
@@ -482,6 +505,8 @@ onMounted(() => {
 }
 
 .recent-exam-list {
+  min-height: 200px;
+  
   .recent-exam-item {
     display: flex;
     justify-content: space-between;

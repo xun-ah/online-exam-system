@@ -172,6 +172,14 @@ export function getScoreStatistics(examId) {
   })
 }
 
+// 获取错题分析
+export function getErrorAnalysis(examId) {
+  return request({
+    url: `/teacher/grading/error-analysis/${examId}`,
+    method: 'get'
+  })
+}
+
 // 导出成绩
 export function exportExamScores(params) {
   return request({

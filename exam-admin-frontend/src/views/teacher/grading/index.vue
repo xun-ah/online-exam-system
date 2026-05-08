@@ -136,6 +136,68 @@
       </el-tab-pane>
     </el-tabs>
 
+    <!-- 详情对话框 -->
+    <el-dialog v-model="detailDialogVisible" :title="'答题详情 - ' + detailData.studentName" width="900px">
+      <el-descriptions :column="2" border style="margin-bottom: 20px">
+        <el-descriptions-item label="学号">{{ detailData.studentNo }}</el-descriptions-item>
+        <el-descriptions-item label="姓名">{{ detailData.studentName }}</el-descriptions-item>
+        <el-descriptions-item label="客观题得分">{{ detailData.objectiveScore }}/{{ detailData.objectiveTotal }}</el-descriptions-item>
+        <el-descriptions-item label="主观题得分">{{ detailData.subjectiveScore }}/{{ detailData.subjectiveTotal }}</el-descriptions-item>
+        <el-descriptions-item label="总分" :span="2">
+          <span style="color:#67c23a;font-weight:bold;font-size:18px">{{ detailData.totalScore }}</span> 分
+        </el-descriptions-item>
+      </el-descriptions>
+      
+      <el-tabs type="border-card">
+        <el-tab-pane label="客观题">
+          <el-table :data="detailData.objectiveQuestions" style="width: 100%">
+            <el-table-column prop="number" label="题号" width="80" />
+            <el-table-column prop="type" label="题型" width="100" />
+            <el-table-column prop="content" label="题目内容" show-overflow-tooltip />
+            <el-table-column label="正确答案" width="100">
+              <template #default="{row}">
+                <span style="color:#67c23a">{{ row.correctAnswer }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="学生答案" width="100">
+              <template #default="{row}">
+                <span :style="{color: row.isCorrect ? '#67c23a' : '#f56c6c'}">{{ row.studentAnswer }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="得分" width="80">
+              <template #default="{row}">
+                <span :style="{color: row.isCorrect ? '#67c23a' : '#f56c6c', fontWeight: 'bold'}">
+                  {{ row.isCorrect ? row.fullScore : 0 }}/{{ row.fullScore }}
+                </span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-tab-pane>
+        
+        <el-tab-pane label="主观题">
+          <div v-for="q in detailData.subjectiveQuestions" :key="q.id" class="question-detail-item">
+            <div class="question-detail-header">
+              <span class="question-number">{{ q.number }}.</span>
+              <span class="question-type">{{ q.type }}</span>
+              <span class="question-score">得分: {{ q.score }}/{{ q.fullScore }}分</span>
+            </div>
+            <div class="question-detail-content">
+              <h5>题目内容:</h5>
+              <p>{{ q.content }}</p>
+            </div>
+            <div class="answer-detail">
+              <h5>学生答案:</h5>
+              <p style="background:#f9f9f9;padding:10px;border-radius:4px">{{ q.studentAnswer }}</p>
+            </div>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+      
+      <template #footer>
+        <el-button @click="detailDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 阅卷对话框 -->
     <el-dialog v-model="gradeDialogVisible" title="在线阅卷" width="900px">
       <div class="grading-content">
@@ -166,7 +228,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   getPendingGrading, 
@@ -174,6 +236,7 @@ import {
   getGradingDetail, 
   submitGrading,
   getScoreStatistics,
+  getErrorAnalysis,
   exportExamScores,
   getExamList,
   getMyClasses
@@ -184,6 +247,18 @@ const loading = ref(false)
 const pendingList = ref([])
 const gradedList = ref([])
 const gradeDialogVisible = ref(false)
+const detailDialogVisible = ref(false)
+const detailData = reactive({
+  studentNo: '',
+  studentName: '',
+  objectiveScore: 0,
+  objectiveTotal: 0,
+  subjectiveScore: 0,
+  subjectiveTotal: 0,
+  totalScore: 0,
+  objectiveQuestions: [],
+  subjectiveQuestions: []
+})
 const currentRecord = reactive({
   recordId: null,
   studentName: '',
@@ -255,7 +330,7 @@ const handleSearch = () => {
 // 开始阅卷
 const handleGrade = async (row) => {
   try {
-    const res = await getGradingDetail(row.examId)
+    const res = await getGradingDetail(row.recordId)
     if (res.data) {
       currentRecord.recordId = res.data.recordId
       currentRecord.studentName = res.data.studentName
@@ -288,19 +363,45 @@ const submitGrade = async () => {
 }
 
 // 查看详情
-const handleViewDetail = (row) => {
-  ElMessage.info('查看成绩详情')
+const handleViewDetail = async (row) => {
+  try {
+    const res = await getGradingDetail(row.id)
+    if (res.data) {
+      detailData.studentNo = res.data.studentNo
+      detailData.studentName = res.data.studentName
+      detailData.objectiveScore = res.data.objectiveScore
+      detailData.objectiveTotal = res.data.objectiveTotal || 0
+      detailData.subjectiveScore = res.data.subjectiveScore || 0
+      detailData.subjectiveTotal = res.data.subjectiveTotal || 0
+      detailData.totalScore = res.data.totalScore
+      detailData.objectiveQuestions = res.data.objectiveQuestions || []
+      detailData.subjectiveQuestions = res.data.subjectiveQuestions || []
+      detailDialogVisible.value = true
+    }
+  } catch (error) {
+    console.error('获取详情失败:', error)
+    ElMessage.error('获取详情失败')
+  }
 }
 
 // 获取考试列表
 const fetchExams = async () => {
   try {
     const res = await getExamList({ pageNum: 1, pageSize: 100 })
-    if (res.data && res.data.records) {
-      examOptions.value = res.data.records.map(exam => ({
-        id: exam.id,
-        examName: exam.examName
-      }))
+    if (res.data) {
+      // 后端返回的是数组格式
+      if (Array.isArray(res.data)) {
+        examOptions.value = res.data.map(exam => ({
+          id: exam.id,
+          examName: exam.examName
+        }))
+      } else if (res.data.records) {
+        // 兼容PageResult格式
+        examOptions.value = res.data.records.map(exam => ({
+          id: exam.id,
+          examName: exam.examName
+        }))
+      }
     }
   } catch (error) {
     console.error('获取考试列表失败:', error)
@@ -341,9 +442,16 @@ const fetchStatistics = async () => {
   }
   
   try {
+    // 获取统计数据
     const res = await getScoreStatistics(statsForm.examId)
     if (res.data) {
       Object.assign(statistics, res.data)
+    }
+    
+    // 获取错题分析
+    const errorRes = await getErrorAnalysis(statsForm.examId)
+    if (errorRes.data) {
+      errorQuestions.value = errorRes.data
     }
   } catch (error) {
     console.error('获取成绩统计失败:', error)
@@ -353,8 +461,18 @@ const fetchStatistics = async () => {
 
 onMounted(() => {
   fetchPendingGrading()
+  fetchGradedRecords()
   fetchExams()
   fetchClasses()
+})
+
+// 监听标签页切换
+watch(activeTab, (newVal) => {
+  if (newVal === 'graded') {
+    fetchGradedRecords()
+  } else if (newVal === 'pending') {
+    fetchPendingGrading()
+  }
 })
 </script>
 

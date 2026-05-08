@@ -98,7 +98,7 @@ public class TeacherPaperController {
             paper.setPaperName(paperName);
             paper.setSubject(subject);
             paper.setDuration(duration);
-            paper.setTeacherId(userId); // 简化处理
+            // teacherId会在service中设置
             paper.setStatus("unpublished");
             paper.setCreateTime(LocalDateTime.now());
             
@@ -208,8 +208,8 @@ public class TeacherPaperController {
      * 根据题型随机获取题目
      */
     private List<Question> getQuestionsByType(Long teacherId, String subject, int type, int count) {
-        // 获取该题型所有题目
-        List<Question> allQuestions = questionMapper.selectList(teacherId, type, null, null, subject, 0, 1000);
+        // 只按科目和题型查询，不按教师过滤（题库共享）
+        List<Question> allQuestions = questionMapper.selectList(null, type, null, null, subject, 0, 1000);
         
         // 随机打乱
         Collections.shuffle(allQuestions);

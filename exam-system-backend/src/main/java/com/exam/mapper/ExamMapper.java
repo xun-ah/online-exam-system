@@ -17,6 +17,11 @@ public interface ExamMapper {
      */
     List<Exam> selectListByDepartmentId(@Param("departmentId") Long departmentId);
     
+    /**
+     * 根据班级ID查询考试列表
+     */
+    List<Exam> selectListByClassId(@Param("classId") Long classId);
+    
     int insert(Exam exam);
     
     int updateById(Exam exam);

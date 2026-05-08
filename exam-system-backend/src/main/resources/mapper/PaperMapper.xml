@@ -47,7 +47,7 @@
                p.description, p.subject, p.difficulty, p.status, p.question_config,
                p.create_time, p.update_time, p.deleted
         FROM paper p
-        INNER JOIN teacher t ON p.teacher_id = t.user_id
+        INNER JOIN teacher t ON p.teacher_id = t.id
         WHERE t.department_id = #{departmentId}
         ORDER BY p.create_time DESC
     </select>

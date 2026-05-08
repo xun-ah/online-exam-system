@@ -1,14 +1,9 @@
 package com.exam.controller;
 
+import cn.hutool.json.JSONUtil;
 import com.exam.common.Result;
-import com.exam.entity.Exam;
-import com.exam.entity.ExamRecord;
-import com.exam.entity.Student;
-import com.exam.entity.Teacher;
-import com.exam.mapper.ExamMapper;
-import com.exam.mapper.ExamRecordMapper;
-import com.exam.mapper.StudentMapper;
-import com.exam.mapper.TeacherMapper;
+import com.exam.entity.*;
+import com.exam.mapper.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -37,6 +32,15 @@ public class TeacherGradingController {
     @Autowired
     private TeacherMapper teacherMapper;
     
+    @Autowired
+    private ClassMapper classMapper;
+    
+    @Autowired
+    private PaperMapper paperMapper;
+    
+    @Autowired
+    private QuestionMapper questionMapper;
+    
     /**
      * 获取待阅卷列表
      */
@@ -48,32 +52,65 @@ public class TeacherGradingController {
             return Result.error("未找到教师信息");
         }
         
-        // 查询本院系的所有考试（通过班级关联院系）
+        // 查询本院系的所有考试
         List<Exam> exams = examMapper.selectListByDepartmentId(teacher.getDepartmentId());
         List<Map<String, Object>> pendingList = new ArrayList<>();
         
         for (Exam exam : exams) {
             List<ExamRecord> records = examRecordMapper.selectList(exam.getId(), null);
-            long pendingCount = records.stream()
-                .filter(r -> r.getStatus() != null && r.getStatus() == 1)
-                .count();
-            
-            if (pendingCount > 0) {
-                Map<String, Object> examData = new HashMap<>();
-                examData.put("examId", exam.getId());
-                examData.put("examName", exam.getExamName());
-                examData.put("className", exam.getPaperName());
-                examData.put("pendingCount", pendingCount);
-                
-                LocalDateTime earliest = records.stream()
-                    .filter(r -> r.getStatus() != null && r.getStatus() == 1)
-                    .map(ExamRecord::getSubmitTime)
-                    .filter(Objects::nonNull)
-                    .min(LocalDateTime::compareTo)
-                    .orElse(null);
-                
-                examData.put("submitTime", earliest != null ? earliest.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) : "");
-                pendingList.add(examData);
+            for (ExamRecord record : records) {
+                // status=0 或 status=1 表示待阅卷（根据实际业务定义）
+                if (record.getStatus() != null && record.getStatus() == 1) {
+                    Student student = studentMapper.selectById(record.getStudentId());
+                    
+                    // 获取班级名称
+                    String className = "";
+                    if (exam.getClassId() != null) {
+                        ClassInfo classInfo = classMapper.selectById(exam.getClassId());
+                        className = classInfo != null ? classInfo.getClassName() : "";
+                    }
+                    
+                    // 计算客观题和主观题满分
+                    int objectiveTotal = 0;
+                    int subjectiveTotal = 0;
+                    if (exam.getPaperId() != null) {
+                        Paper paper = paperMapper.selectById(exam.getPaperId());
+                        if (paper != null && paper.getQuestionConfig() != null) {
+                            try {
+                                @SuppressWarnings("unchecked")
+                                List<Map<String, Object>> questionDetails = (List<Map<String, Object>>) JSONUtil.parseObj(paper.getQuestionConfig()).get("questions");
+                                if (questionDetails != null) {
+                                    for (Map<String, Object> q : questionDetails) {
+                                        Long qId = Long.valueOf(q.get("questionId").toString());
+                                        BigDecimal score = new BigDecimal(q.get("score").toString());
+                                        Question question = questionMapper.selectById(qId);
+                                        if (question != null) {
+                                            if (question.getType() <= 3) {
+                                                objectiveTotal += score.intValue();
+                                            } else {
+                                                subjectiveTotal += score.intValue();
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    }
+                    
+                    Map<String, Object> data = new HashMap<>();
+                    data.put("recordId", record.getId());
+                    data.put("examId", exam.getId());
+                    data.put("examName", exam.getExamName());
+                    data.put("className", className);
+                    data.put("pendingCount", 1);
+                    data.put("objectiveTotal", objectiveTotal);
+                    data.put("subjectiveTotal", subjectiveTotal);
+                    data.put("submitTime", record.getSubmitTime() != null ? 
+                        record.getSubmitTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) : "");
+                    pendingList.add(data);
+                }
             }
         }
         
@@ -114,14 +151,91 @@ public class TeacherGradingController {
             if (record.getStatus() == null || record.getStatus() != 2) continue;
             
             Student student = studentMapper.selectById(record.getStudentId());
+            
+            // 获取考试信息以计算满分和得分
+            Exam exam = examMapper.selectById(record.getExamId());
+            int objectiveTotal = 0;
+            int subjectiveTotal = 0;
+            int objectiveScore = 0;
+            int subjectiveScore = 0;
+            if (exam != null && exam.getPaperId() != null) {
+                Paper paper = paperMapper.selectById(exam.getPaperId());
+                if (paper != null && paper.getQuestionConfig() != null) {
+                    try {
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> questionDetails = (List<Map<String, Object>>) JSONUtil.parseObj(paper.getQuestionConfig()).get("questions");
+                        if (questionDetails != null) {
+                            // 解析学生答案
+                            Map<Long, String> studentAnswers = new HashMap<>();
+                            if (record.getAnswers() != null) {
+                                try {
+                                    cn.hutool.json.JSONArray answersArray = JSONUtil.parseArray(record.getAnswers());
+                                    for (int i = 0; i < answersArray.size(); i++) {
+                                        cn.hutool.json.JSONObject ansObj = answersArray.getJSONObject(i);
+                                        Long qId = Long.valueOf(ansObj.get("questionId").toString());
+                                        studentAnswers.put(qId, ansObj.get("answer").toString());
+                                    }
+                                } catch (Exception e) {
+                                    e.printStackTrace();
+                                }
+                            }
+                            
+                            for (Map<String, Object> q : questionDetails) {
+                                Long qId = Long.valueOf(q.get("questionId").toString());
+                                BigDecimal score = new BigDecimal(q.get("score").toString());
+                                Question question = questionMapper.selectById(qId);
+                                if (question != null) {
+                                    if (question.getType() <= 3) {
+                                        // 客观题
+                                        objectiveTotal += score.intValue();
+                                        String studentAnswer = studentAnswers.get(qId);
+                                        if (studentAnswer != null) {
+                                            boolean isCorrect = false;
+                                            if (question.getType() == 1) {
+                                                // 单选题
+                                                isCorrect = question.getAnswer().trim().equalsIgnoreCase(studentAnswer.trim());
+                                            } else if (question.getType() == 3) {
+                                                // 判断题：兼容多种答案格式
+                                                isCorrect = isTrueFalseMatch(question.getAnswer(), studentAnswer);
+                                            } else if (question.getType() == 2) {
+                                                // 多选题：比较答案（不区分顺序）
+                                                String correctAnswer = question.getAnswer().trim().toUpperCase();
+                                                String studentAns = studentAnswer.trim().toUpperCase();
+                                                Set<String> correctSet = new HashSet<>(Arrays.asList(correctAnswer.split("")));
+                                                Set<String> studentSet = new HashSet<>(Arrays.asList(studentAns.split("")));
+                                                isCorrect = correctSet.equals(studentSet);
+                                            }
+                                            if (isCorrect) {
+                                                objectiveScore += score.intValue();
+                                            }
+                                        }
+                                    } else {
+                                        // 主观题
+                                        subjectiveTotal += score.intValue();
+                                    }
+                                }
+                            }
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+            
+            // 如果已阅卷，从数据库读取客观题得分
+            if (record.getStatus() != null && record.getStatus() == 2 && record.getScore() != null) {
+                objectiveScore = record.getScore().intValue();
+            }
+            
             Map<String, Object> data = new HashMap<>();
             data.put("id", record.getId());
             data.put("studentNo", student != null ? student.getStudentNo() : "");
+            data.put("studentName", student != null ? student.getRealName() : "");
             data.put("realName", student != null ? student.getRealName() : "");
-            data.put("objectiveScore", 0);
-            data.put("objectiveTotal", 70);
-            data.put("subjectiveScore", 0);
-            data.put("subjectiveTotal", 30);
+            data.put("objectiveScore", objectiveScore);
+            data.put("objectiveTotal", objectiveTotal);
+            data.put("subjectiveScore", subjectiveScore);
+            data.put("subjectiveTotal", subjectiveTotal);
             data.put("totalScore", record.getScore() != null ? record.getScore().intValue() : 0);
             gradedList.add(data);
         }
@@ -138,12 +252,117 @@ public class TeacherGradingController {
         if (record == null) return Result.error("考试记录不存在");
         
         Student student = studentMapper.selectById(record.getStudentId());
+        
+        // 获取考试和班级信息
+        Exam exam = examMapper.selectById(record.getExamId());
+        String className = "";
+        if (exam != null && exam.getClassId() != null) {
+            ClassInfo classInfo = classMapper.selectById(exam.getClassId());
+            className = classInfo != null ? classInfo.getClassName() : "";
+        }
+        
+        List<Map<String, Object>> objectiveQuestions = new ArrayList<>();
+        List<Map<String, Object>> subjectiveQuestions = new ArrayList<>();
+        int objectiveTotal = 0;
+        int subjectiveTotal = 0;
+        int subjectiveScore = 0;
+        
+        if (exam != null && exam.getPaperId() != null) {
+            Paper paper = paperMapper.selectById(exam.getPaperId());
+            if (paper != null && paper.getQuestionConfig() != null) {
+                try {
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> questionDetails = (List<Map<String, Object>>) JSONUtil.parseObj(paper.getQuestionConfig()).get("questions");
+                    if (questionDetails != null) {
+                        // 解析学生答案
+                        Map<Long, String> studentAnswers = new HashMap<>();
+                        if (record.getAnswers() != null) {
+                            try {
+                                cn.hutool.json.JSONArray answersArray = JSONUtil.parseArray(record.getAnswers());
+                                for (int i = 0; i < answersArray.size(); i++) {
+                                    cn.hutool.json.JSONObject ansObj = answersArray.getJSONObject(i);
+                                    Long qId = Long.valueOf(ansObj.get("questionId").toString());
+                                    studentAnswers.put(qId, ansObj.get("answer").toString());
+                                }
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                        }
+                        
+                        int objectiveNumber = 1;
+                        int subjectiveNumber = 1;
+                        
+                        for (Map<String, Object> questionDetail : questionDetails) {
+                            Long questionId = Long.valueOf(questionDetail.get("questionId").toString());
+                            BigDecimal questionScore = new BigDecimal(questionDetail.get("score").toString());
+                            
+                            Question question = questionMapper.selectById(questionId);
+                            if (question == null) continue;
+                            
+                            String studentAnswer = studentAnswers.getOrDefault(questionId, "未作答");
+                            
+                            if (question.getType() <= 3) {
+                                // 客观题
+                                objectiveTotal += questionScore.intValue();
+                                boolean isCorrect = false;
+                                
+                                if (question.getType() == 1) {
+                                    // 单选题
+                                    isCorrect = question.getAnswer().trim().equalsIgnoreCase(studentAnswer.trim());
+                                } else if (question.getType() == 3) {
+                                    // 判断题：兼容多种答案格式
+                                    isCorrect = isTrueFalseMatch(question.getAnswer(), studentAnswer);
+                                } else if (question.getType() == 2) {
+                                    // 多选题
+                                    String correctAnswer = question.getAnswer().trim().toUpperCase();
+                                    String studentAns = studentAnswer.trim().toUpperCase();
+                                    Set<String> correctSet = new HashSet<>(Arrays.asList(correctAnswer.split("")));
+                                    Set<String> studentSet = new HashSet<>(Arrays.asList(studentAns.split("")));
+                                    isCorrect = correctSet.equals(studentSet);
+                                }
+                                
+                                Map<String, Object> qData = new HashMap<>();
+                                qData.put("number", objectiveNumber++);
+                                qData.put("type", question.getType() == 1 ? "单选题" : (question.getType() == 2 ? "多选题" : "判断题"));
+                                qData.put("content", question.getContent());
+                                qData.put("correctAnswer", question.getAnswer());
+                                qData.put("studentAnswer", studentAnswer);
+                                qData.put("fullScore", questionScore.intValue());
+                                qData.put("isCorrect", isCorrect);
+                                objectiveQuestions.add(qData);
+                            } else {
+                                // 主观题
+                                subjectiveTotal += questionScore.intValue();
+                                Map<String, Object> qData = new HashMap<>();
+                                qData.put("id", question.getId());
+                                qData.put("number", subjectiveNumber++);
+                                qData.put("type", question.getType() == 4 ? "填空题" : "简答题");
+                                qData.put("content", question.getContent());
+                                qData.put("fullScore", questionScore.intValue());
+                                qData.put("studentAnswer", studentAnswer);
+                                qData.put("score", 0);
+                                subjectiveQuestions.add(qData);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        
         Map<String, Object> detail = new HashMap<>();
         detail.put("recordId", record.getId());
         detail.put("studentNo", student != null ? student.getStudentNo() : "");
         detail.put("studentName", student != null ? student.getRealName() : "");
+        detail.put("className", className);
         detail.put("objectiveScore", record.getScore() != null ? record.getScore().intValue() : 0);
-        detail.put("subjectiveQuestions", new ArrayList<>());
+        detail.put("objectiveTotal", objectiveTotal);
+        detail.put("subjectiveScore", subjectiveScore);
+        detail.put("subjectiveTotal", subjectiveTotal);
+        detail.put("totalScore", record.getScore() != null ? record.getScore().intValue() : 0);
+        detail.put("objectiveQuestions", objectiveQuestions);
+        detail.put("subjectiveQuestions", subjectiveQuestions);
         
         return Result.success(detail);
     }
@@ -158,6 +377,17 @@ public class TeacherGradingController {
         ExamRecord record = examRecordMapper.selectById(recordId);
         if (record == null) return Result.error("考试记录不存在");
         
+        // 获取主观题得分
+        BigDecimal subjectiveScore = new BigDecimal(params.getOrDefault("subjectiveScore", "0").toString());
+        
+        // 获取客观题得分（学生提交时已自动计算）
+        BigDecimal objectiveScore = record.getScore() != null ? record.getScore() : BigDecimal.ZERO;
+        
+        // 计算总分 = 客观题得分 + 主观题得分
+        BigDecimal totalScore = objectiveScore.add(subjectiveScore);
+        record.setScore(totalScore);
+        
+        // 更新状态为已阅卷
         record.setStatus(2);
         examRecordMapper.updateById(record);
         
@@ -205,5 +435,146 @@ public class TeacherGradingController {
     @GetMapping("/export")
     public Result<String> exportScores(@RequestParam(required = false) Long examId) {
         return Result.success("导出功能开发中", null);
+    }
+    
+    /**
+     * 获取错题分析 - 错误率TOP5
+     */
+    @GetMapping("/error-analysis/{examId}")
+    public Result<List<Map<String, Object>>> getErrorAnalysis(@PathVariable Long examId) {
+        // 获取该考试的所有已阅卷记录
+        List<ExamRecord> records = examRecordMapper.selectList(examId, null);
+        List<ExamRecord> graded = records.stream()
+            .filter(r -> r.getStatus() != null && r.getStatus() == 2)
+            .collect(Collectors.toList());
+        
+        if (graded.isEmpty()) {
+            return Result.success(new ArrayList<>());
+        }
+        
+        // 获取试卷信息
+        Exam exam = examMapper.selectById(examId);
+        if (exam == null || exam.getPaperId() == null) {
+            return Result.success(new ArrayList<>());
+        }
+        
+        Paper paper = paperMapper.selectById(exam.getPaperId());
+        if (paper == null || paper.getQuestionConfig() == null) {
+            return Result.success(new ArrayList<>());
+        }
+        
+        try {
+            // 解析题目配置
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> questionDetails = (List<Map<String, Object>>) JSONUtil.parseObj(paper.getQuestionConfig()).get("questions");
+            
+            // 统计每道题的错误情况
+            Map<Long, Map<String, Object>> questionErrorStats = new HashMap<>();
+            
+            for (Map<String, Object> q : questionDetails) {
+                Long qId = Long.valueOf(q.get("questionId").toString());
+                Question question = questionMapper.selectById(qId);
+                if (question == null) continue;
+                
+                // 只统计客观题（单选、多选、判断）
+                if (question.getType() > 3) continue;
+                
+                int totalAnswered = 0;
+                int errorCount = 0;
+                
+                // 遍历所有已阅卷记录
+                for (ExamRecord record : graded) {
+                    if (record.getAnswers() == null) continue;
+                    
+                    try {
+                        cn.hutool.json.JSONArray answersArray = JSONUtil.parseArray(record.getAnswers());
+                        for (int i = 0; i < answersArray.size(); i++) {
+                            cn.hutool.json.JSONObject ansObj = answersArray.getJSONObject(i);
+                            Long recordQId = Long.valueOf(ansObj.get("questionId").toString());
+                            
+                            if (recordQId.equals(qId)) {
+                                totalAnswered++;
+                                String studentAnswer = ansObj.get("answer").toString();
+                                
+                                // 判断是否答错
+                                boolean isCorrect = false;
+                                if (question.getType() == 1) {
+                                    // 单选题
+                                    isCorrect = question.getAnswer().trim().equalsIgnoreCase(studentAnswer.trim());
+                                } else if (question.getType() == 3) {
+                                    // 判断题
+                                    isCorrect = isTrueFalseMatch(question.getAnswer(), studentAnswer);
+                                } else if (question.getType() == 2) {
+                                    // 多选题
+                                    isCorrect = question.getAnswer().trim().equalsIgnoreCase(studentAnswer.trim());
+                                }
+                                
+                                if (!isCorrect) {
+                                    errorCount++;
+                                }
+                                break;
+                            }
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+                
+                if (totalAnswered > 0) {
+                    Map<String, Object> errorStat = new HashMap<>();
+                    errorStat.put("questionId", qId);
+                    errorStat.put("content", question.getContent());
+                    errorStat.put("totalCount", totalAnswered);
+                    errorStat.put("errorCount", errorCount);
+                    errorStat.put("errorRate", String.format("%.1f", (double) errorCount / totalAnswered * 100));
+                    questionErrorStats.put(qId, errorStat);
+                }
+            }
+            
+            // 按错误率排序，取TOP5
+            List<Map<String, Object>> topErrors = questionErrorStats.values().stream()
+                .sorted((a, b) -> Double.valueOf(b.get("errorRate").toString()).compareTo(Double.valueOf(a.get("errorRate").toString())))
+                .limit(5)
+                .collect(Collectors.toList());
+            
+            return Result.success(topErrors);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.error("获取错题分析失败");
+        }
+    }
+    
+    /**
+     * 判断题答案匹配（兼容多种格式）
+     * 支持的格式：正确/错误、√/×、T/F、true/false、1/0
+     */
+    private boolean isTrueFalseMatch(String correctAnswer, String studentAnswer) {
+        // 将答案转换为统一的标准格式
+        String correct = normalizeTrueFalse(correctAnswer);
+        String student = normalizeTrueFalse(studentAnswer);
+        
+        return correct.equals(student);
+    }
+    
+    /**
+     * 将判断题答案标准化为 "T" 或 "F"
+     */
+    private String normalizeTrueFalse(String answer) {
+        if (answer == null) return "";
+        
+        String ans = answer.trim().toLowerCase();
+        
+        // 正确的各种表示
+        if (ans.equals("正确") || ans.equals("√") || ans.equals("t") || ans.equals("true") || ans.equals("1") || ans.equals("对")) {
+            return "T";
+        }
+        
+        // 错误的各种表示
+        if (ans.equals("错误") || ans.equals("×") || ans.equals("x") || ans.equals("f") || ans.equals("false") || ans.equals("0") || ans.equals("错")) {
+            return "F";
+        }
+        
+        // 如果都不匹配，返回原值（用于直接比较）
+        return ans;
     }
 }

@@ -16,9 +16,9 @@
             <p class="detail">
               <span>工号：{{ userInfo?.username || 'T2024001' }}</span>
               <span>|</span>
-              <span>所属院系：{{ userInfo?.department || '软件学院' }}</span>
-              <span>|</span>
-              <span>本学期授课：3 门</span>
+              <span>所属院系：{{ userInfo?.department || '加载中...' }}</span>
+              <span v-if="stats.courseCount !== undefined">|</span>
+              <span v-if="stats.courseCount !== undefined">本学期授课：{{ stats.courseCount }} 门</span>
             </p>
           </div>
         </div>
@@ -183,8 +183,13 @@ const fetchTeacherInfo = async () => {
     // 只获取统计数据，不更新用户信息
     const res = await getTeacherDashboardStats()
     if (res.data) {
-      // 如果需要显示院系信息，从 store 中获取或使用默认值
-      // 不要覆盖 realName、username 等基本信息
+      // 更新userInfo中的院系信息
+      if (res.data.departmentName) {
+        userStore.setUserInfo({
+          ...userStore.userInfo,
+          department: res.data.departmentName
+        })
+      }
     }
   } catch (error) {
     console.error('获取教师信息失败:', error)

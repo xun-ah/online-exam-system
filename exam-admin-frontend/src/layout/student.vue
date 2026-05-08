@@ -82,18 +82,6 @@
             <el-icon><CollectionTag /></el-icon>
             <template #title>错题本</template>
           </el-menu-item>
-          <el-menu-item index="/student/exam-record">
-            <el-icon><Tickets /></el-icon>
-            <template #title>成绩单</template>
-          </el-menu-item>
-          <el-menu-item index="/student/profile">
-            <el-icon><User /></el-icon>
-            <template #title>个人信息</template>
-          </el-menu-item>
-          <el-menu-item index="/student/profile">
-            <el-icon><Lock /></el-icon>
-            <template #title>修改密码</template>
-          </el-menu-item>
         </el-menu>
       </div>
 

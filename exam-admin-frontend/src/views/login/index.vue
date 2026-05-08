@@ -281,7 +281,7 @@ const handleLogin = async () => {
         const roleRoutes = {
           1: '/admin/dashboard',   // 管理员
           2: '/teacher/dashboard', // 教师
-          3: '/student/exam-list'  // 学生
+          3: '/student/dashboard'  // 学生
         }
                 
         const targetRoute = roleRoutes[res.data.role]

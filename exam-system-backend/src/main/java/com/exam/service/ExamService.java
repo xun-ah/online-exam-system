@@ -103,6 +103,11 @@ public class ExamService {
     public void createExam(Exam exam, Long userId) {
         exam.setTeacherId(userId);
         exam.setStatus(0); // 默认未开始
+        // 自动计算考试时长（分钟）
+        if (exam.getStartTime() != null && exam.getEndTime() != null) {
+            long minutes = java.time.Duration.between(exam.getStartTime(), exam.getEndTime()).toMinutes();
+            exam.setDuration((int) Math.max(minutes, 0));
+        }
         examMapper.insert(exam);
     }
     
@@ -110,6 +115,11 @@ public class ExamService {
      * 更新考试
      */
     public void updateExam(Exam exam) {
+        // 自动计算考试时长（分钟）
+        if (exam.getStartTime() != null && exam.getEndTime() != null) {
+            long minutes = java.time.Duration.between(exam.getStartTime(), exam.getEndTime()).toMinutes();
+            exam.setDuration((int) Math.max(minutes, 0));
+        }
         examMapper.updateById(exam);
     }
     

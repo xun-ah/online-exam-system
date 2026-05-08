@@ -7,6 +7,10 @@ import com.exam.entity.Student;
 import com.exam.service.StudentService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import javax.servlet.http.HttpServletRequest;
+import java.util.List;
 
 @RestController
 @RequestMapping("/admin/students")
@@ -48,5 +52,48 @@ public class AdminStudentController {
     public Result<Void> deleteStudent(@PathVariable Long id) {
         studentService.deleteStudent(id);
         return Result.success();
+    }
+    
+    /**
+     * Excel导入学生
+     */
+    @SysLog("Excel导入学生")
+    @PostMapping("/import")
+    public Result<String> importStudents(@RequestParam("file") MultipartFile file,
+                                         HttpServletRequest request) {
+        try {
+            String result = studentService.importStudentsFromExcel(file);
+            return Result.success(result);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.error("导入失败：" + e.getMessage());
+        }
+    }
+    
+    /**
+     * 下载导入模板
+     */
+    @GetMapping("/template")
+    public void downloadTemplate(HttpServletRequest request, javax.servlet.http.HttpServletResponse response) {
+        try {
+            studentService.downloadTemplate(response);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * 获取导入结果统计
+     */
+    private String getImportResultMessage(int successCount, int failCount, List<String> errors) {
+        StringBuilder msg = new StringBuilder();
+        msg.append("导入完成！成功：").append(successCount).append("条，失败：").append(failCount).append("条");
+        if (!errors.isEmpty()) {
+            msg.append("\n失败原因：");
+            for (String error : errors) {
+                msg.append("\n-").append(error);
+            }
+        }
+        return msg.toString();
     }
 }
