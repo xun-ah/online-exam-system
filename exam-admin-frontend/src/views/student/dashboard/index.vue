@@ -55,9 +55,9 @@
                 <div class="exam-details">
                   <span>考试时间：{{ formatDateTime(exam.startTime) }}</span>
                   <span class="divider">|</span>
-                  <span>时长：{{ exam.duration }}分钟</span>
+                  <span>时长：{{ exam.duration || 0 }}分钟</span>
                   <span class="divider">|</span>
-                  <span>总分：{{ exam.totalScore }}分</span>
+                  <span>总分：{{ exam.totalScore || 0 }}分</span>
                 </div>
               </div>
               <div class="exam-action">
@@ -116,12 +116,12 @@ import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { LineChart } from 'echarts/charts'
-import { TitleComponent, TooltipComponent, GridComponent } from 'echarts/components'
+import { TitleComponent, TooltipComponent, GridComponent, MarkLineComponent } from 'echarts/components'
 import request from '@/utils/request'
 import { useUserStore } from '@/store/user'
 
 // 注册 echarts 组件
-use([CanvasRenderer, LineChart, TitleComponent, TooltipComponent, GridComponent])
+use([CanvasRenderer, LineChart, TitleComponent, TooltipComponent, GridComponent, MarkLineComponent])
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -150,52 +150,96 @@ const recentExams = ref([])
 const scoreTrend = ref([])
 
 // 图表配置
-const chartOption = computed(() => ({
-  tooltip: {
-    trigger: 'axis'
-  },
-  grid: {
-    left: '3%',
-    right: '4%',
-    bottom: '15%',
-    top: '10%',
-    containLabel: true
-  },
-  xAxis: {
-    type: 'category',
-    boundaryGap: false,
-    data: scoreTrend.value.map(item => item.examName)
-  },
-  yAxis: {
-    type: 'value',
-    min: 0,
-    max: 100
-  },
-  series: [
-    {
-      name: '成绩',
-      type: 'line',
-      data: scoreTrend.value.map(item => item.score),
-      smooth: true,
-      itemStyle: {
-        color: '#409EFF'
+const chartOption = computed(() => {
+  const examNames = scoreTrend.value.map(item => item.examName)
+  const scores = scoreTrend.value.map(item => item.score)
+  
+  // 根据分数设置点的颜色
+  const itemColors = scores.map(score => {
+    if (score >= 90) return '#67c23a'
+    if (score >= 80) return '#409eff'
+    if (score >= 60) return '#e6a23c'
+    return '#f56c6c'
+  })
+  
+  return {
+    tooltip: {
+      trigger: 'axis',
+      formatter: function(params) {
+        const item = params[0]
+        const score = item.value
+        let status = score >= 60 ? '及格' : '不及格'
+        return `${item.name}<br/>分数: ${score}分<br/>状态: ${status}`
+      }
+    },
+    grid: {
+      left: '8%',
+      right: '4%',
+      bottom: '15%',
+      top: '10%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: examNames,
+      axisLabel: {
+        rotate: 20,
+        interval: 0,
+        fontSize: 12
       },
-      areaStyle: {
-        color: {
-          type: 'linear',
-          x: 0,
-          y: 0,
-          x2: 0,
-          y2: 1,
-          colorStops: [
-            { offset: 0, color: 'rgba(64, 158, 255, 0.3)' },
-            { offset: 1, color: 'rgba(64, 158, 255, 0.05)' }
-          ]
+      axisLine: {
+        lineStyle: { color: '#ddd' }
+      }
+    },
+    yAxis: {
+      type: 'value',
+      min: 0,
+      max: 100,
+      axisLine: { lineStyle: { color: '#ddd' } },
+      splitLine: { lineStyle: { color: '#f0f0f0', type: 'dashed' } }
+    },
+    series: [
+      {
+        name: '成绩',
+        type: 'line',
+        data: scores.map((score, index) => ({
+          value: score,
+          itemStyle: { color: itemColors[index] }
+        })),
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 8,
+        lineStyle: { color: '#409eff', width: 3 },
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(64, 158, 255, 0.25)' },
+              { offset: 1, color: 'rgba(64, 158, 255, 0.02)' }
+            ]
+          }
         }
       }
+    ],
+    // 及格线
+    markLine: {
+      data: [{
+        yAxis: 60,
+        name: '及格线',
+        lineStyle: { color: '#f56c6c', type: 'dashed', width: 2 },
+        label: {
+          formatter: '及格线 60分',
+          position: 'end',
+          color: '#f56c6c',
+          fontSize: 11
+        }
+      }],
+      silent: true
     }
-  ]
-}))
+  }
+})
 
 // 格式化日期时间
 const formatDateTime = (dateTime) => {
@@ -306,6 +350,7 @@ const loadRecentExams = async () => {
 const loadScoreTrend = async () => {
   try {
     const res = await request.get('/student/score/trend')
+    // 后端已按时间正序返回，直接使用
     scoreTrend.value = res.data || []
   } catch (error) {
     console.error('加载成绩趋势失败:', error)

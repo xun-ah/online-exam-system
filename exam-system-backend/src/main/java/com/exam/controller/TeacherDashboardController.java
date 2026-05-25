@@ -329,7 +329,7 @@ public class TeacherDashboardController {
             data.put("questionTypeData", questionTypeData);
             
             // 3. 教学统计信息
-            data.put("courseCount", teacherMapper.countClassesByTeacherId(teacherId));
+            data.put("courseCount", teacherMapper.countSubjectsByTeacherId(teacherId));
             data.put("studentCount", teacherMapper.countStudentsByTeacherId(teacherId));
             data.put("examSessionCount", exams.size());
             

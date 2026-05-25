@@ -1,5 +1,7 @@
 package com.exam.controller;
 
+
+
 import com.exam.annotation.SysLog;
 import com.exam.common.PageResult;
 import com.exam.common.Result;
@@ -7,6 +9,8 @@ import com.exam.entity.Student;
 import com.exam.entity.ExamRecord;
 import com.exam.entity.Department;
 import com.exam.entity.ClassInfo;
+import com.exam.entity.User;
+import com.exam.entity.Exam;
 import com.exam.mapper.StudentMapper;
 import com.exam.mapper.ExamRecordMapper;
 import com.exam.mapper.ExamMapper;
@@ -14,9 +18,15 @@ import com.exam.mapper.TeacherClassMapper;
 import com.exam.mapper.TeacherMapper;
 import com.exam.mapper.DepartmentMapper;
 import com.exam.mapper.ClassMapper;
+import com.exam.mapper.UserMapper;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import javax.servlet.http.HttpServletResponse;
+import java.io.OutputStream;
+import java.net.URLEncoder;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -48,10 +58,12 @@ public class TeacherStudentController {
     @Autowired
     private ClassMapper classMapper;
     
+    @Autowired
+    private UserMapper userMapper;
+    
     /**
      * 获取学生列表(教师所属院系的学生)
      */
-    @SysLog("查询学生列表")
     @GetMapping
     public Result<PageResult<Map<String, Object>>> getStudentList(
             @RequestParam(required = false) Long departmentId,
@@ -167,11 +179,114 @@ public class TeacherStudentController {
      */
     @SysLog("导出学生成绩")
     @GetMapping("/export")
-    public Result<String> exportScores(
+    public void exportScores(
             @RequestParam(required = false) Long classId,
-            @RequestAttribute("userId") Long userId) {
-        // TODO: 实现Excel导出功能
-        return Result.success("导出功能开发中");
+            @RequestAttribute("userId") Long userId,
+            HttpServletResponse response) {
+        try {
+            // 获取教师所属院系
+            var teacher = teacherMapper.selectByUserId(userId);
+            if (teacher == null) {
+                response.setStatus(400);
+                return;
+            }
+            
+            // 查询学生列表
+            List<Student> students = studentMapper.selectList(null, null, classId, teacher.getDepartmentId(), 0, 10000);
+            
+            if (students == null || students.isEmpty()) {
+                response.setStatus(404);
+                return;
+            }
+            
+            // 创建Excel工作簿
+            Workbook workbook = new XSSFWorkbook();
+            Sheet sheet = workbook.createSheet("学生成绩表");
+            
+            // 创建标题样式
+            CellStyle headerStyle = workbook.createCellStyle();
+            headerStyle.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            headerStyle.setBorderBottom(BorderStyle.THIN);
+            headerStyle.setBorderTop(BorderStyle.THIN);
+            headerStyle.setBorderLeft(BorderStyle.THIN);
+            headerStyle.setBorderRight(BorderStyle.THIN);
+            headerStyle.setAlignment(HorizontalAlignment.CENTER);
+            
+            Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerFont.setFontHeightInPoints((short) 12);
+            headerStyle.setFont(headerFont);
+            
+            // 创建表头
+            Row headerRow = sheet.createRow(0);
+            String[] headers = {"学号", "姓名", "性别", "班级", "院系", "联系电话", "考试次数", "最高分", "最低分", "平均分"};
+            for (int i = 0; i < headers.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+            }
+            
+            // 填充数据
+            for (int i = 0; i < students.size(); i++) {
+                Student student = students.get(i);
+                Row row = sheet.createRow(i + 1);
+                
+                row.createCell(0).setCellValue(student.getStudentNo());
+                row.createCell(1).setCellValue(student.getRealName());
+                row.createCell(2).setCellValue(student.getGender() == 1 ? "男" : "女");
+                row.createCell(3).setCellValue(student.getClassName() != null ? student.getClassName() : "");
+                row.createCell(4).setCellValue(student.getDepartmentName() != null ? student.getDepartmentName() : "");
+                row.createCell(5).setCellValue(student.getPhone() != null ? student.getPhone() : "");
+                
+                // 查询该学生的所有考试记录
+                List<ExamRecord> records = examRecordMapper.selectList(null, student.getId());
+                
+                int examCount = 0;
+                double maxScore = 0;
+                double minScore = 100;
+                double totalScore = 0;
+                
+                for (ExamRecord record : records) {
+                    if (record.getStatus() != null && record.getStatus() >= 2 && record.getScore() != null) {
+                        examCount++;
+                        double score = record.getScore().doubleValue();
+                        totalScore += score;
+                        if (score > maxScore) maxScore = score;
+                        if (score < minScore) minScore = score;
+                    }
+                }
+                
+                double avgScore = examCount > 0 ? totalScore / examCount : 0;
+                
+                row.createCell(6).setCellValue(examCount);
+                row.createCell(7).setCellValue(examCount > 0 ? maxScore : 0);
+                row.createCell(8).setCellValue(examCount > 0 ? minScore : 0);
+                row.createCell(9).setCellValue(String.format("%.2f", avgScore));
+            }
+            
+            // 自动调整列宽
+            for (int i = 0; i < headers.length; i++) {
+                sheet.autoSizeColumn(i);
+            }
+            
+            // 设置响应头
+            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            response.setCharacterEncoding("utf-8");
+            String fileName = URLEncoder.encode("学生成绩_" + System.currentTimeMillis(), "UTF-8").replaceAll("\\+", "%20");
+            response.setHeader("Content-disposition", "attachment;filename*=utf-8''" + fileName + ".xlsx");
+            
+            // 写入响应
+            try (OutputStream outputStream = response.getOutputStream()) {
+                workbook.write(outputStream);
+                outputStream.flush();
+            } finally {
+                workbook.close();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            response.setStatus(500);
+        }
     }
     
     /**
@@ -217,5 +332,77 @@ public class TeacherStudentController {
         List<ClassInfo> classes = classMapper.selectList(targetDepartmentId);
         
         return Result.success(classes);
+    }
+    
+    /**
+     * 新增学生
+     */
+    @SysLog("新增学生")
+    @PostMapping
+    public Result<String> addStudent(@RequestBody Student student, @RequestAttribute("userId") Long userId) {
+        try {
+            // 获取教师所属院系ID
+            var teacher = teacherMapper.selectByUserId(userId);
+            if (teacher == null) {
+                return Result.error("未找到教师信息");
+            }
+            
+            // 设置默认值
+            if (student.getDepartmentId() == null) {
+                student.setDepartmentId(teacher.getDepartmentId());
+            }
+            
+            // 先创建user账号
+            User user = new User();
+            user.setUsername(student.getStudentNo()); // 用户名=学号
+            user.setPassword("123456"); // 默认密码
+            user.setRealName(student.getRealName());
+            user.setPhone(student.getPhone());
+            user.setEmail(student.getEmail());
+            user.setRole(3); // 3-学生
+            user.setStatus(1); // 1-正常
+            
+            userMapper.insert(user);
+            
+            // 关联userId到student表
+            student.setUserId(user.getId());
+            studentMapper.insert(student);
+            
+            return Result.success("新增学生成功");
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.error("新增学生失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 更新学生信息
+     */
+    @SysLog("更新学生信息")
+    @PutMapping("/{id}")
+    public Result<String> updateStudent(@PathVariable Long id, @RequestBody Student student) {
+        try {
+            student.setId(id);
+            studentMapper.updateById(student);
+            return Result.success("更新学生信息成功");
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.error("更新学生信息失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 删除学生
+     */
+    @SysLog("删除学生")
+    @DeleteMapping("/{id}")
+    public Result<String> deleteStudent(@PathVariable Long id) {
+        try {
+            studentMapper.deleteById(id);
+            return Result.success("删除学生成功");
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.error("删除学生失败: " + e.getMessage());
+        }
     }
 }

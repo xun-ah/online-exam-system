@@ -17,7 +17,6 @@ public class ClassInfoController {
     @Autowired
     private ClassInfoService classInfoService;
     
-    @SysLog("查询班级列表")
     @GetMapping
     public Result<PageResult<ClassInfo>> getClassList(
             @RequestParam(required = false) Long departmentId,

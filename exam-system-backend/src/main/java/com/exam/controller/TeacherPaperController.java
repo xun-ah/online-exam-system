@@ -48,6 +48,74 @@ public class TeacherPaperController {
     }
 
     /**
+     * 获取试卷题目列表（用于预览）
+     */
+    @GetMapping("/{id}/questions")
+    public Result<List<Map<String, Object>>> getPaperQuestions(@PathVariable Long id) {
+        // 获取试卷信息
+        Paper paper = paperMapper.selectById(id);
+        if (paper == null) {
+            return Result.error("试卷不存在");
+        }
+        
+        List<Map<String, Object>> result = new ArrayList<>();
+        
+        // 解析试卷题目配置
+        if (paper.getQuestionConfig() != null) {
+            try {
+                cn.hutool.json.JSONObject config = cn.hutool.json.JSONUtil.parseObj(paper.getQuestionConfig());
+                cn.hutool.json.JSONArray questions = config.getJSONArray("questions");
+                if (questions != null) {
+                    for (int i = 0; i < questions.size(); i++) {
+                        cn.hutool.json.JSONObject item = questions.getJSONObject(i);
+                        Long questionId = item.getLong("questionId");
+                        
+                        // 获取题目详情
+                        Question question = questionMapper.selectById(questionId);
+                        if (question != null) {
+                            Map<String, Object> questionData = new HashMap<>();
+                            questionData.put("id", question.getId());
+                            questionData.put("type", question.getType());
+                            questionData.put("content", question.getContent());
+                            
+                            // 解析选项（JSON格式）
+                            if (question.getOptions() != null && !question.getOptions().isEmpty()) {
+                                try {
+                                    cn.hutool.json.JSONObject opts = cn.hutool.json.JSONUtil.parseObj(question.getOptions());
+                                    questionData.put("optionA", opts.getStr("A", ""));
+                                    questionData.put("optionB", opts.getStr("B", ""));
+                                    questionData.put("optionC", opts.getStr("C", ""));
+                                    questionData.put("optionD", opts.getStr("D", ""));
+                                } catch (Exception e) {
+                                    questionData.put("optionA", "");
+                                    questionData.put("optionB", "");
+                                    questionData.put("optionC", "");
+                                    questionData.put("optionD", "");
+                                }
+                            } else {
+                                questionData.put("optionA", "");
+                                questionData.put("optionB", "");
+                                questionData.put("optionC", "");
+                                questionData.put("optionD", "");
+                            }
+                            
+                            questionData.put("answer", question.getAnswer());
+                            questionData.put("analysis", question.getAnalysis());
+                            questionData.put("difficulty", question.getDifficulty());
+                            questionData.put("score", item.get("score")); // 使用试卷配置的分值
+                            result.add(questionData);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        
+        return Result.success(result);
+    }
+
+    /**
      * 创建试卷
      */
     @PostMapping
@@ -112,67 +180,87 @@ public class TeacherPaperController {
 
             // 单选题 (type=1)
             if (typeConfig.containsKey("singleCount") && ((Number)typeConfig.get("singleCount")).intValue() > 0) {
-                List<Question> singles = getQuestionsByType(userId, subject, 1, ((Number)typeConfig.get("singleCount")).intValue());
+                int count = ((Number)typeConfig.get("singleCount")).intValue();
+                List<Question> singles = getQuestionsByType(userId, subject, 1, count);
                 BigDecimal scorePerQ = new BigDecimal(typeConfig.getOrDefault("singleScore", 2).toString());
                 for (Question q : singles) {
                     Map<String, Object> detail = new HashMap<>();
                     detail.put("questionId", q.getId());
                     detail.put("score", scorePerQ);
                     questionDetails.add(detail);
-                    totalScore = totalScore.add(scorePerQ);
                 }
+                // 按配置数量计算分数，而不是实际抽取数量
+                totalScore = totalScore.add(scorePerQ.multiply(new BigDecimal(count)));
             }
 
             // 多选题 (type=2)
             if (typeConfig.containsKey("multiCount") && ((Number)typeConfig.get("multiCount")).intValue() > 0) {
-                List<Question> multis = getQuestionsByType(userId, subject, 2, ((Number)typeConfig.get("multiCount")).intValue());
+                int count = ((Number)typeConfig.get("multiCount")).intValue();
+                List<Question> multis = getQuestionsByType(userId, subject, 2, count);
                 BigDecimal scorePerQ = new BigDecimal(typeConfig.getOrDefault("multiScore", 3).toString());
                 for (Question q : multis) {
                     Map<String, Object> detail = new HashMap<>();
                     detail.put("questionId", q.getId());
                     detail.put("score", scorePerQ);
                     questionDetails.add(detail);
-                    totalScore = totalScore.add(scorePerQ);
                 }
+                totalScore = totalScore.add(scorePerQ.multiply(new BigDecimal(count)));
             }
 
             // 判断题 (type=3)
             if (typeConfig.containsKey("judgeCount") && ((Number)typeConfig.get("judgeCount")).intValue() > 0) {
-                List<Question> judges = getQuestionsByType(userId, subject, 3, ((Number)typeConfig.get("judgeCount")).intValue());
+                int count = ((Number)typeConfig.get("judgeCount")).intValue();
+                List<Question> judges = getQuestionsByType(userId, subject, 3, count);
                 BigDecimal scorePerQ = new BigDecimal(typeConfig.getOrDefault("judgeScore", 1).toString());
                 for (Question q : judges) {
                     Map<String, Object> detail = new HashMap<>();
                     detail.put("questionId", q.getId());
                     detail.put("score", scorePerQ);
                     questionDetails.add(detail);
-                    totalScore = totalScore.add(scorePerQ);
                 }
+                totalScore = totalScore.add(scorePerQ.multiply(new BigDecimal(count)));
             }
 
             // 填空题 (type=4)
             if (typeConfig.containsKey("fillCount") && ((Number)typeConfig.get("fillCount")).intValue() > 0) {
-                List<Question> fills = getQuestionsByType(userId, subject, 4, ((Number)typeConfig.get("fillCount")).intValue());
+                int count = ((Number)typeConfig.get("fillCount")).intValue();
+                List<Question> fills = getQuestionsByType(userId, subject, 4, count);
                 BigDecimal scorePerQ = new BigDecimal(typeConfig.getOrDefault("fillScore", 5).toString());
                 for (Question q : fills) {
                     Map<String, Object> detail = new HashMap<>();
                     detail.put("questionId", q.getId());
                     detail.put("score", scorePerQ);
                     questionDetails.add(detail);
-                    totalScore = totalScore.add(scorePerQ);
                 }
+                totalScore = totalScore.add(scorePerQ.multiply(new BigDecimal(count)));
             }
 
             // 简答题 (type=5)
             if (typeConfig.containsKey("essayCount") && ((Number)typeConfig.get("essayCount")).intValue() > 0) {
-                List<Question> essays = getQuestionsByType(userId, subject, 5, ((Number)typeConfig.get("essayCount")).intValue());
+                int count = ((Number)typeConfig.get("essayCount")).intValue();
+                List<Question> essays = getQuestionsByType(userId, subject, 5, count);
                 BigDecimal scorePerQ = new BigDecimal(typeConfig.getOrDefault("essayScore", 10).toString());
                 for (Question q : essays) {
                     Map<String, Object> detail = new HashMap<>();
                     detail.put("questionId", q.getId());
                     detail.put("score", scorePerQ);
                     questionDetails.add(detail);
-                    totalScore = totalScore.add(scorePerQ);
                 }
+                totalScore = totalScore.add(scorePerQ.multiply(new BigDecimal(count)));
+            }
+
+            // 编程题 (type=6)
+            if (typeConfig.containsKey("programCount") && ((Number)typeConfig.get("programCount")).intValue() > 0) {
+                int count = ((Number)typeConfig.get("programCount")).intValue();
+                List<Question> programs = getQuestionsByType(userId, subject, 6, count);
+                BigDecimal scorePerQ = new BigDecimal(typeConfig.getOrDefault("programScore", 15).toString());
+                for (Question q : programs) {
+                    Map<String, Object> detail = new HashMap<>();
+                    detail.put("questionId", q.getId());
+                    detail.put("score", scorePerQ);
+                    questionDetails.add(detail);
+                }
+                totalScore = totalScore.add(scorePerQ.multiply(new BigDecimal(count)));
             }
 
             paper.setTotalScore(totalScore);

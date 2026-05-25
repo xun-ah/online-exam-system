@@ -20,6 +20,10 @@ public class ExamRecord {
     
     private Integer status; // 0-考试中 1-已提交 2-已阅卷
     
+    private Integer extraMinutes; // 延长考试时间（分钟）
+    
+    private Integer switchCount; // 切屏次数
+    
     private LocalDateTime createTime;
     
     private LocalDateTime updateTime;

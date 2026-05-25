@@ -1,4 +1,4 @@
-<template>
+ <template>
   <div class="question-bank-container">
     <!-- 面包屑导航 -->
     <el-breadcrumb separator="/" class="breadcrumb">
@@ -63,67 +63,94 @@
     </el-row>
 
     <!-- 搜索和操作区 -->
-    <el-card class="search-card" shadow="never">
-      <div class="search-header">
-        <el-form :inline="true" :model="searchForm" class="search-form">
-          <el-form-item label="科目">
-            <el-select v-model="searchForm.subject" placeholder="全部科目" clearable style="width: 150px">
-              <el-option 
-                v-for="item in subjectList" 
-                :key="item.id" 
-                :label="item.name" 
-                :value="item.name"
-              />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="题型">
-            <el-select v-model="searchForm.type" placeholder="全部题型" clearable style="width: 120px">
-              <el-option label="单选题" :value="1" />
-              <el-option label="多选题" :value="2" />
-              <el-option label="判断题" :value="3" />
-              <el-option label="填空题" :value="4" />
-              <el-option label="简答题" :value="5" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="难度">
-            <el-select v-model="searchForm.difficulty" placeholder="全部难度" clearable style="width: 120px">
-              <el-option label="简单" :value="1" />
-              <el-option label="中等" :value="2" />
-              <el-option label="困难" :value="3" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="关键词">
-            <el-input v-model="searchForm.keyword" placeholder="搜索题目内容" clearable style="width: 200px" />
-          </el-form-item>
-          <el-form-item>
-            <el-button type="primary" @click="handleSearch">
-              <el-icon><Search /></el-icon>
-              搜索
+    <el-card class="search-card" shadow="hover">
+      <div class="filter-container">
+        <!-- 筛选条件区 -->
+        <div class="filter-section">
+          <div class="section-title">
+            <el-icon><Filter /></el-icon>
+            <span>筛选条件</span>
+          </div>
+          <div class="filter-content">
+            <div class="filter-item">
+              <label>科目</label>
+              <el-select v-model="searchForm.subject" placeholder="全部科目" clearable>
+                <el-option 
+                  v-for="item in subjectList" 
+                  :key="item.id" 
+                  :label="item.name" 
+                  :value="item.name"
+                />
+              </el-select>
+            </div>
+            <div class="filter-item">
+              <label>题型</label>
+              <el-select v-model="searchForm.type" placeholder="全部题型" clearable>
+                <el-option label="单选题" :value="1" />
+                <el-option label="多选题" :value="2" />
+                <el-option label="判断题" :value="3" />
+                <el-option label="填空题" :value="4" />
+                <el-option label="简答题" :value="5" />
+                <el-option label="编程题" :value="6" />
+              </el-select>
+            </div>
+            <div class="filter-item">
+              <label>难度</label>
+              <el-select v-model="searchForm.difficulty" placeholder="全部难度" clearable>
+                <el-option label="简单" :value="1" />
+                <el-option label="中等" :value="2" />
+                <el-option label="困难" :value="3" />
+              </el-select>
+            </div>
+            <div class="filter-item keyword-item">
+              <label>关键词</label>
+              <el-input v-model="searchForm.keyword" placeholder="搜索题目内容" clearable>
+                <template #suffix>
+                  <el-icon><Search /></el-icon>
+                </template>
+              </el-input>
+            </div>
+            <div class="filter-item button-item">
+              <el-button @click="handleSearch" type="primary">
+                <el-icon><Search /></el-icon>
+                搜索
+              </el-button>
+              <el-button @click="handleReset">
+                <el-icon><RefreshLeft /></el-icon>
+                重置
+              </el-button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 操作按钮区 -->
+        <div class="action-section">
+          <div class="section-title">
+            <el-icon><Operation /></el-icon>
+            <span>操作</span>
+          </div>
+          <div class="action-content">
+            <el-button type="primary" @click="handleAdd">
+              <el-icon><Plus /></el-icon>
+              新增题目
             </el-button>
-            <el-button @click="handleReset">重置</el-button>
-          </el-form-item>
-        </el-form>
-        <div class="action-buttons">
-          <el-button type="primary" @click="handleAdd">
-            <el-icon><Plus /></el-icon>
-            新增题目
-          </el-button>
-          <el-button type="success" @click="handleImportDialog">
-            <el-icon><Upload /></el-icon>
-            批量导入
-          </el-button>
-          <el-button type="warning" @click="handleExport">
-            <el-icon><Download /></el-icon>
-            批量导出
-          </el-button>
-          <el-button 
-            type="danger" 
-            @click="handleBatchDelete"
-            :disabled="selectedQuestions.length === 0"
-          >
-            <el-icon><Delete /></el-icon>
-            批量删除 ({{ selectedQuestions.length }})
-          </el-button>
+            <el-button type="success" @click="handleImportDialog">
+              <el-icon><Upload /></el-icon>
+              批量导入
+            </el-button>
+            <el-button type="warning" @click="handleExport">
+              <el-icon><Download /></el-icon>
+              批量导出
+            </el-button>
+            <el-button 
+              type="danger" 
+              @click="handleBatchDelete"
+              :disabled="selectedQuestions.length === 0"
+            >
+              <el-icon><Delete /></el-icon>
+              批量删除 ({{ selectedQuestions.length }})
+            </el-button>
+          </div>
         </div>
       </div>
     </el-card>
@@ -137,7 +164,11 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="55" />
-        <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column label="序号" width="80">
+          <template #default="{ $index }">
+            {{ (pagination.pageNum - 1) * pagination.pageSize + $index + 1 }}
+          </template>
+        </el-table-column>
         <el-table-column prop="content" label="题目内容" min-width="300" show-overflow-tooltip />
         <el-table-column label="题型" width="100">
           <template #default="{ row }">
@@ -197,6 +228,7 @@
                 <el-radio :label="3">判断题</el-radio>
                 <el-radio :label="4">填空题</el-radio>
                 <el-radio :label="5">简答题</el-radio>
+                <el-radio :label="6">编程题</el-radio>
               </el-radio-group>
             </el-form-item>
           </el-col>
@@ -253,6 +285,42 @@
           <el-input v-model="questionForm.answer" type="textarea" :rows="3" placeholder="请输入参考答案（仅作为阅卷参考，非必填）" />
           <div class="form-tip">简答题无需标准答案，此内容仅供教师阅卷时参考</div>
         </el-form-item>
+
+        <!-- 编程题专用字段 -->
+        <template v-if="questionForm.type === 6">
+          <el-form-item label="编程语言" prop="language">
+            <el-select v-model="questionForm.language" placeholder="请选择编程语言" style="width: 100%">
+              <el-option label="Java" value="Java" />
+              <el-option label="Python" value="Python" />
+              <el-option label="C++" value="C++" />
+              <el-option label="C" value="C" />
+              <el-option label="JavaScript" value="JavaScript" />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="代码模板" prop="codeTemplate">
+            <el-input v-model="questionForm.codeTemplate" type="textarea" :rows="8" placeholder="请输入代码模板（支持使用 ``` 包裹代码块）" />
+          </el-form-item>
+
+          <el-form-item label="测试用例" prop="testCases">
+            <el-input v-model="questionForm.testCases" type="textarea" :rows="6" placeholder='请输入测试用例（JSON格式），例如：[{&quot;input&quot;:&quot;1 2&quot;,&quot;output&quot;:&quot;3&quot;}]' />
+          </el-form-item>
+
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="时间限制" prop="timeLimit">
+                <el-input-number v-model="questionForm.timeLimit" :min="100" :max="10000" :step="100" style="width: 100%" />
+                <span class="unit-text">毫秒</span>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="内存限制" prop="memoryLimit">
+                <el-input-number v-model="questionForm.memoryLimit" :min="32" :max="1024" :step="32" style="width: 100%" />
+                <span class="unit-text">MB</span>
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </template>
 
         <el-form-item label="答案解析">
           <el-input v-model="questionForm.analysis" type="textarea" :rows="3" placeholder="请输入题目解析（选填）" />
@@ -339,6 +407,56 @@
       </template>
     </el-dialog>
 
+    <!-- 批量导出对话框 -->
+    <el-dialog v-model="exportDialogVisible" title="批量导出题目" width="600px">
+      <div class="export-content">
+        <el-alert title="导出说明" type="info" :closable="false" style="margin-bottom: 20px">
+          <template #default>
+            <p>1. 导出的题目将包含在Excel文件中</p>
+            <p>2. 可根据筛选条件导出指定题目</p>
+            <p>3. 不选择筛选条件将导出所有题目</p>
+          </template>
+        </el-alert>
+        
+        <el-form label-width="80px">
+          <el-form-item label="所属科目">
+            <el-select v-model="exportSubject" placeholder="请选择科目（可选）" clearable style="width: 100%">
+              <el-option 
+                v-for="item in subjectList" 
+                :key="item.id" 
+                :label="item.name" 
+                :value="item.name"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="题型">
+            <el-select v-model="exportType" placeholder="请选择题型（可选）" clearable style="width: 100%">
+              <el-option label="单选题" :value="1" />
+              <el-option label="多选题" :value="2" />
+              <el-option label="判断题" :value="3" />
+              <el-option label="填空题" :value="4" />
+              <el-option label="简答题" :value="5" />
+              <el-option label="编程题" :value="6" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="难度">
+            <el-select v-model="exportDifficulty" placeholder="请选择难度（可选）" clearable style="width: 100%">
+              <el-option label="简单" :value="1" />
+              <el-option label="中等" :value="2" />
+              <el-option label="困难" :value="3" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="关键词">
+            <el-input v-model="exportKeyword" placeholder="请输入题目内容关键词（可选）" />
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <el-button @click="exportDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleExportSubmit">开始导出</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 题目预览对话框 -->
     <el-dialog v-model="previewDialogVisible" title="题目预览" width="700px">
       <div class="question-preview">
@@ -353,10 +471,17 @@
         </div>
         <div class="preview-options" v-if="currentQuestion.type <= 2">
           <h4>选项：</h4>
-          <p>A. {{ currentQuestion.optionA }}</p>
-          <p>B. {{ currentQuestion.optionB }}</p>
-          <p>C. {{ currentQuestion.optionC }}</p>
-          <p>D. {{ currentQuestion.optionD }}</p>
+          <template v-if="currentQuestion.options">
+            <div v-for="(opt, index) in parsePreviewOptions(currentQuestion.options)" :key="index" class="option-item">
+              {{ String.fromCharCode(65 + index) }}. {{ opt }}
+            </div>
+          </template>
+          <template v-else>
+            <p>A. {{ currentQuestion.optionA || '' }}</p>
+            <p>B. {{ currentQuestion.optionB || '' }}</p>
+            <p>C. {{ currentQuestion.optionC || '' }}</p>
+            <p>D. {{ currentQuestion.optionD || '' }}</p>
+          </template>
         </div>
         <div class="preview-answer">
           <h4>正确答案：</h4>
@@ -375,9 +500,10 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
-  Document, Plus, Collection, TrendCharts, Search, Upload, Download, UploadFilled, Delete
+  Document, Plus, Collection, TrendCharts, Search, Upload, Download, UploadFilled, Delete,
+  Filter, Operation, RefreshLeft
 } from '@element-plus/icons-vue'
-import { getQuestionList, createQuestion, updateQuestion, deleteQuestion, batchDeleteQuestions, getSubjectList } from '@/api/teacher/index'
+import { getQuestionList, createQuestion, updateQuestion, deleteQuestion, batchDeleteQuestions, getSubjectList, exportQuestions } from '@/api/teacher/index'
 import request from '@/utils/request'
 
 const loading = ref(false)
@@ -388,9 +514,17 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('新增题目')
 const questionFormRef = ref(null)
 const importDialogVisible = ref(false)
+const exportDialogVisible = ref(false)
 const previewDialogVisible = ref(false)
 const importFile = ref(null)
 const importSubject = ref('') // 导入时选择的科目
+
+// 导出相关变量
+const exportSubject = ref('')
+const exportType = ref(null)
+const exportDifficulty = ref(null)
+const exportKeyword = ref('')
+
 const selectedQuestions = ref([]) // 选中的题目
 const currentQuestion = ref({})
 
@@ -426,7 +560,12 @@ const questionForm = reactive({
   answer: '',
   analysis: '',
   score: 5,
-  tags: []
+  tags: [],
+  language: 'Java',
+  codeTemplate: '',
+  testCases: '',
+  timeLimit: 1000,
+  memoryLimit: 256
 })
 
 // 获取科目列表
@@ -464,6 +603,35 @@ const rules = {
     }
   ],
   score: [{ required: true, message: '请输入分值', trigger: 'blur' }]
+}
+
+// 解析预览选项
+const parsePreviewOptions = (optionsData) => {
+  if (!optionsData) return []
+  
+  // 如果已经是数组
+  if (Array.isArray(optionsData)) {
+    return optionsData
+  }
+  
+  try {
+    // 尝试解析JSON
+    const parsed = JSON.parse(optionsData)
+    if (Array.isArray(parsed)) {
+      return parsed
+    }
+    // 如果是对象格式 {"A": "选项1", "B": "选项2"}，转换为数组
+    if (typeof parsed === 'object') {
+      return Object.values(parsed)
+    }
+    return []
+  } catch (e) {
+    // 如果不是JSON，尝试用|分隔
+    if (typeof optionsData === 'string') {
+      return optionsData.split('|').filter(o => o.trim())
+    }
+    return []
+  }
 }
 
 // 获取统计数据
@@ -649,17 +817,8 @@ const handleImportSubmit = async () => {
   }
   
   try {
-    // 创建FormData对象
-    const formData = new FormData()
-    formData.append('file', importFile.value.raw)
-    formData.append('subject', importSubject.value)
-    
     // 调用后端导入API
-    const res = await request.post('/teacher/questions/batch-import', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    })
+    const res = await batchImportQuestions(importFile.value.raw, importSubject.value)
     
     if (res.code === 200) {
       ElMessage.success(res.data.message || '导入成功')
@@ -679,9 +838,48 @@ const handleImportSubmit = async () => {
 }
 
 // 导出
-const handleExport = () => {
-  ElMessage.info('导出功能开发中')
-  // TODO: 调用导出API
+const handleExport = async () => {
+  // 打开导出对话框
+  exportDialogVisible.value = true
+}
+
+// 导出提交
+const handleExportSubmit = async () => {
+  try {
+    // 构建导出参数
+    const params = {
+      type: exportType.value,
+      difficulty: exportDifficulty.value,
+      keyword: exportKeyword.value,
+      subject: exportSubject.value
+    }
+    
+    // 调用导出API
+    const res = await exportQuestions(params)
+    
+    // 处理blob响应，创建下载链接
+    const blob = new Blob([res], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = '题目导出_' + new Date().getTime() + '.xlsx'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success('导出成功')
+    exportDialogVisible.value = false
+    
+    // 重置导出表单
+    exportSubject.value = ''
+    exportType.value = null
+    exportDifficulty.value = null
+    exportKeyword.value = ''
+  } catch (error) {
+    console.error('导出失败:', error)
+    ElMessage.error('导出失败')
+  }
 }
 
 // 分页
@@ -705,12 +903,20 @@ const handleSubmit = async () => {
       ...questionForm,
       score: questionForm.score,
       // 将选项拼接为JSON
-      options: JSON.stringify({
+      options: questionForm.type <= 2 ? JSON.stringify({
         A: questionForm.optionA,
         B: questionForm.optionB,
         C: questionForm.optionC,
         D: questionForm.optionD
-      })
+      }) : null
+    }
+    
+    // 编程题需要清理不需要的字段
+    if (questionForm.type === 6) {
+      submitData.optionA = null
+      submitData.optionB = null
+      submitData.optionC = null
+      submitData.optionD = null
     }
     
     if (questionForm.id) {
@@ -754,18 +960,23 @@ const resetForm = () => {
     answer: '',
     analysis: '',
     score: 5,
-    tags: []
+    tags: [],
+    language: 'Java',
+    codeTemplate: '',
+    testCases: '',
+    timeLimit: 1000,
+    memoryLimit: 256
   })
 }
 
 // 辅助函数
 const getTypeTagType = (type) => {
-  const types = { 1: '', 2: 'success', 3: 'warning', 4: 'danger', 5: 'info' }
+  const types = { 1: '', 2: 'success', 3: 'warning', 4: 'danger', 5: 'info', 6: 'primary' }
   return types[type] || ''
 }
 
 const getTypeText = (type) => {
-  const texts = { 1: '单选题', 2: '多选题', 3: '判断题', 4: '填空题', 5: '简答题' }
+  const texts = { 1: '单选题', 2: '多选题', 3: '判断题', 4: '填空题', 5: '简答题', 6: '编程题' }
   return texts[type] || '未知'
 }
 
@@ -850,26 +1061,155 @@ onMounted(() => {
 
   .search-card {
     margin-bottom: 20px;
-    border-radius: 8px;
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
 
-    .search-header {
+    &:hover {
+      box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.08);
+    }
+
+    :deep(.el-card__body) {
+      padding: 20px;
+    }
+
+    .filter-container {
       display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 20px;
+      gap: 24px;
 
-      .search-form {
+      .filter-section {
         flex: 1;
-        
-        :deep(.el-form-item) {
-          margin-bottom: 0;
+        background: #fff;
+        border-radius: 10px;
+        padding: 16px 20px;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid #e8e9eb;
+
+        .section-title {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: #303133;
+          font-size: 14px;
+          font-weight: 600;
+          margin-bottom: 16px;
+          position: relative;
+          z-index: 1;
+
+          .el-icon {
+            font-size: 16px;
+            color: #409eff;
+          }
+        }
+
+        .filter-content {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 16px;
+          position: relative;
+          z-index: 1;
+
+          .filter-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+
+            label {
+              font-size: 12px;
+              color: #606266;
+              font-weight: 500;
+            }
+
+            &.keyword-item {
+              grid-column: span 2;
+            }
+
+            &.button-item {
+              flex-direction: row;
+              align-items: flex-end;
+              gap: 10px;
+            }
+
+            :deep(.el-select),
+            :deep(.el-input) {
+              .el-input__wrapper {
+                background: #f5f7fa;
+                box-shadow: none;
+                border: 1px solid #dcdfe6;
+                border-radius: 8px;
+                transition: all 0.3s ease;
+
+                &:hover {
+                  background: #fff;
+                  border-color: #c0c4cc;
+                }
+
+                &.is-focus {
+                  background: #fff;
+                  border-color: #409eff;
+                  box-shadow: 0 0 0 1px #409eff inset;
+                }
+
+                .el-input__inner {
+                  color: #303133;
+                  
+                  &::placeholder {
+                    color: #909399;
+                  }
+                }
+              }
+            }
+          }
         }
       }
 
-      .action-buttons {
-        display: flex;
-        gap: 10px;
-        white-space: nowrap;
+      .action-section {
+        min-width: 200px;
+        background: #f8f9fa;
+        border-radius: 10px;
+        padding: 16px 20px;
+        border: 1px solid #e8e9eb;
+
+        .section-title {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: #606266;
+          font-size: 14px;
+          font-weight: 600;
+          margin-bottom: 16px;
+
+          .el-icon {
+            font-size: 16px;
+            color: #409eff;
+          }
+        }
+
+        .action-content {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 12px;
+          margin-left: 0;
+
+          .el-button {
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            margin: 0;
+
+            &:hover {
+              transform: translateY(-2px);
+              box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            }
+          }
+
+          .el-divider {
+            grid-column: span 2;
+            margin: 4px 0;
+          }
+        }
       }
     }
   }
@@ -934,6 +1274,15 @@ onMounted(() => {
         margin: 5px 0;
         line-height: 1.6;
         color: #606266;
+      }
+      
+      .option-item {
+        padding: 8px 12px;
+        margin: 5px 0;
+        background: #f5f7fa;
+        border-radius: 4px;
+        color: #606266;
+        line-height: 1.6;
       }
     }
   }

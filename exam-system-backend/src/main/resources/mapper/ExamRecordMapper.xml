@@ -10,12 +10,14 @@
         <result column="answers" property="answers"/>
         <result column="submit_time" property="submitTime"/>
         <result column="status" property="status"/>
+        <result column="extra_minutes" property="extraMinutes"/>
+        <result column="switch_count" property="switchCount"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
     </resultMap>
     
     <sql id="Base_Column_List">
-        id, exam_id, student_id, score, answers, submit_time, status, create_time, update_time
+        id, exam_id, student_id, score, answers, submit_time, status, extra_minutes, switch_count, create_time, update_time
     </sql>
     
     <select id="selectById" resultMap="BaseResultMap">
@@ -49,6 +51,8 @@
             <if test="answers != null">answers = #{answers},</if>
             <if test="submitTime != null">submit_time = #{submitTime},</if>
             <if test="status != null">status = #{status},</if>
+            <if test="extraMinutes != null">extra_minutes = #{extraMinutes},</if>
+            <if test="switchCount != null">switch_count = #{switchCount},</if>
         </set>
         WHERE id = #{id}
     </update>

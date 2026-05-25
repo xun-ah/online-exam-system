@@ -42,6 +42,13 @@
         WHERE s.user_id = #{userId}
     </select>
     
+    <select id="selectListByClassId" resultMap="BaseResultMap">
+        SELECT s.id, s.student_no, s.real_name, s.user_id
+        FROM student s
+        WHERE s.class_id = #{classId}
+        AND s.deleted = 0
+    </select>
+    
     <select id="selectList" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>,
                ci.class_name as className,

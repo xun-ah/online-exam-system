@@ -81,8 +81,8 @@ public class StudentExamController {
             result.put("endTime", exam.getEndTime().toString());
         }
         
-        // 获取题目列表
-        List<Map<String, Object>> questions = studentExamService.getExamQuestions(paper.getQuestionConfig());
+        // 获取题目列表（根据考试设置决定是否乱序）
+        List<Map<String, Object>> questions = studentExamService.getExamQuestions(paper.getQuestionConfig(), exam.getShuffleEnabled());
         result.put("questions", questions);
         
         return Result.success(result);
@@ -211,6 +211,141 @@ public class StudentExamController {
     }
     
     /**
+     * 获取考试记录详情（含答卷）
+     */
+    @GetMapping("/records/{recordId}")
+    public Result<Map<String, Object>> getExamRecordDetail(@PathVariable Long recordId,
+                                                           @RequestAttribute("userId") Long userId) {
+        // 获取学生信息
+        Student student = studentMapper.selectByUserId(userId);
+        if (student == null) {
+            return Result.error("学生信息不存在");
+        }
+        
+        // 查询考试记录
+        ExamRecord record = examRecordMapper.selectById(recordId);
+        if (record == null || !record.getStudentId().equals(student.getId())) {
+            return Result.error("考试记录不存在");
+        }
+        
+        // 获取考试信息
+        Exam exam = examMapper.selectById(record.getExamId());
+        if (exam == null) {
+            return Result.error("考试不存在");
+        }
+        
+        // 获取试卷信息
+        Paper paper = paperMapper.selectById(exam.getPaperId());
+        if (paper == null) {
+            return Result.error("试卷不存在");
+        }
+        
+        // 构建返回数据
+        Map<String, Object> result = new HashMap<>();
+        
+        // 考试基本信息
+        Map<String, Object> examInfo = new HashMap<>();
+        examInfo.put("examName", exam.getExamName());
+        examInfo.put("score", record.getScore());
+        examInfo.put("submitTime", record.getSubmitTime());
+        examInfo.put("duration", exam.getDuration());
+        result.put("exam", examInfo);
+        
+        // 题目详情列表
+        List<Map<String, Object>> questionList = new ArrayList<>();
+        
+        // 解析学生答案
+        Map<Long, String> answerMap = new HashMap<>();
+        if (record.getAnswers() != null && !record.getAnswers().trim().isEmpty()) {
+            try {
+                if (record.getAnswers().trim().startsWith("[")) {
+                    // 数组格式
+                    cn.hutool.json.JSONArray answerArray = cn.hutool.json.JSONUtil.parseArray(record.getAnswers());
+                    for (int i = 0; i < answerArray.size(); i++) {
+                        cn.hutool.json.JSONObject item = answerArray.getJSONObject(i);
+                        Long qId = item.getLong("questionId");
+                        String ans = item.getStr("answer");
+                        if (qId != null && ans != null) {
+                            answerMap.put(qId, ans);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // 解析失败，忽略
+            }
+        }
+        
+        // 解析试卷题目配置
+        if (paper.getQuestionConfig() != null) {
+            try {
+                cn.hutool.json.JSONObject config = cn.hutool.json.JSONUtil.parseObj(paper.getQuestionConfig());
+                cn.hutool.json.JSONArray questions = config.getJSONArray("questions");
+                
+                for (int i = 0; i < questions.size(); i++) {
+                    cn.hutool.json.JSONObject qConfig = questions.getJSONObject(i);
+                    Long questionId = qConfig.getLong("questionId");
+                    
+                    Question question = questionMapper.selectById(questionId);
+                    if (question == null) continue;
+                    
+                    Map<String, Object> questionDetail = new HashMap<>();
+                    questionDetail.put("questionId", questionId);
+                    questionDetail.put("content", question.getContent());
+                    questionDetail.put("type", question.getType());
+                    questionDetail.put("analysis", question.getAnalysis());
+                    questionDetail.put("studentAnswer", answerMap.get(questionId));
+                    questionDetail.put("correctAnswer", question.getAnswer());
+                    
+                    // 判断是否正确
+                    boolean isCorrect = false;
+                    String studentAnswer = answerMap.get(questionId);
+                    
+                    if (question.getType() == 1 || question.getType() == 3) {
+                        // 单选或判断
+                        if (studentAnswer != null) {
+                            if (question.getType() == 3) {
+                                // 判断题需要标准化比较
+                                isCorrect = isTrueFalseMatch(question.getAnswer(), studentAnswer);
+                            } else {
+                                isCorrect = question.getAnswer().trim().equalsIgnoreCase(studentAnswer.trim());
+                            }
+                        }
+                    } else if (question.getType() == 2) {
+                        // 多选题
+                        if (studentAnswer != null) {
+                            String sortedStudent = sortAnswer(studentAnswer);
+                            String sortedCorrect = sortAnswer(question.getAnswer());
+                            isCorrect = sortedStudent.equals(sortedCorrect);
+                        }
+                    } else if (question.getType() == 4) {
+                        // 简答题：主观题，不自动判分
+                        isCorrect = studentAnswer != null && !studentAnswer.trim().isEmpty();
+                    }
+                    
+                    questionDetail.put("isCorrect", isCorrect);
+                    questionList.add(questionDetail);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        
+        result.put("questions", questionList);
+        
+        return Result.success(result);
+    }
+    
+    /**
+     * 排序答案（用于多选题比较）
+     */
+    private String sortAnswer(String answer) {
+        if (answer == null) return "";
+        List<String> parts = Arrays.asList(answer.split(","));
+        Collections.sort(parts);
+        return String.join(",", parts);
+    }
+    
+    /**
      * 自动批改客观题（单选、多选、判断）
      */
     private BigDecimal autoGradeObjectiveQuestions(Long examId, List<Map<String, Object>> studentAnswers) {
@@ -241,9 +376,6 @@ public class StudentExamController {
             Question question = questionMapper.selectById(questionId);
             if (question == null) continue;
             
-            // 只处理客观题：1-单选题 2-多选题 3-判断题
-            if (question.getType() < 1 || question.getType() > 3) continue;
-            
             // 查找学生答案
             String studentAnswer = null;
             for (Map<String, Object> answer : studentAnswers) {
@@ -255,6 +387,16 @@ public class StudentExamController {
             
             // 如果学生没有作答，跳过
             if (studentAnswer == null || studentAnswer.trim().isEmpty()) continue;
+            
+            // 只处理客观题：1-单选题 2-多选题 3-判断题
+            if (question.getType() < 1 || question.getType() > 3) {
+                // 填空题（type=4）可以自动评分
+                if (question.getType() == 4) {
+                    BigDecimal fillScore = gradeFillBlankQuestion(question, studentAnswer, questionScore);
+                    totalScore = totalScore.add(fillScore);
+                }
+                continue;
+            }
             
             // 判分逻辑
             boolean isCorrect = false;
@@ -322,5 +464,51 @@ public class StudentExamController {
         
         // 如果都不匹配，返回原值（用于直接比较）
         return ans;
+    }
+    
+    /**
+     * 填空题评分逻辑
+     * 支持多空评分：答案用 | 分隔，如 "答案1|答案2|答案3"
+     * 评分策略：
+     * - 完全匹配：所有空都答对才得分
+     * - 部分得分：根据答对的数量按比例给分
+     */
+    private BigDecimal gradeFillBlankQuestion(Question question, String studentAnswer, BigDecimal fullScore) {
+        if (studentAnswer == null || studentAnswer.trim().isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        
+        String correctAnswer = question.getAnswer();
+        if (correctAnswer == null || correctAnswer.trim().isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        
+        // 解析正确答案（支持多空，用 | 分隔）
+        String[] correctAnswers = correctAnswer.split("\\|");
+        // 解析学生答案
+        String[] studentAnswers = studentAnswer.split("\\|");
+        
+        // 如果答案数量不一致，按最少的比较
+        int minLength = Math.min(correctAnswers.length, studentAnswers.length);
+        
+        // 统计答对的数量
+        int correctCount = 0;
+        for (int i = 0; i < minLength; i++) {
+            String correct = correctAnswers[i].trim();
+            String student = studentAnswers[i].trim();
+            
+            // 比较答案（忽略大小写和空格）
+            if (correct.equalsIgnoreCase(student)) {
+                correctCount++;
+            }
+        }
+        
+        // 计算得分（按比例给分）
+        if (correctAnswers.length > 0) {
+            double ratio = (double) correctCount / correctAnswers.length;
+            return fullScore.multiply(new BigDecimal(ratio)).setScale(1, BigDecimal.ROUND_HALF_UP);
+        }
+        
+        return BigDecimal.ZERO;
     }
 }

@@ -184,6 +184,7 @@ CREATE TABLE `exam_record` (
   `answers` TEXT COMMENT '学生答案（JSON格式）',
   `submit_time` DATETIME COMMENT '提交时间',
   `status` INT DEFAULT 0 COMMENT '状态：0-考试中 1-已提交 2-已阅卷',
+  `extra_minutes` INT DEFAULT 0 COMMENT '延长考试时间（分钟）',
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),

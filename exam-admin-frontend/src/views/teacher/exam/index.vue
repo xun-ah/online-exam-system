@@ -38,6 +38,7 @@
           <template #default="{ row }">
             <el-button type="primary" link @click="handleMonitor(row)" v-if="row.status===1">监控</el-button>
             <el-button type="warning" link @click="handleExtend(row)" v-if="row.status===1">延长</el-button>
+            <el-button type="info" link @click="handlePreviewPaper(row)">预览</el-button>
             <el-button type="primary" link @click="handleView(row)">详情</el-button>
             <el-button type="success" link @click="handleEdit(row)">编辑</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
@@ -91,6 +92,10 @@
             style="width:100%" 
           />
         </el-form-item>
+        <el-form-item label="启用乱序">
+          <el-switch v-model="examForm.shuffleEnabled" active-text="启用" inactive-text="不启用" />
+          <div style="font-size:12px; color:#909399; margin-top:5px;">启用后，每位学生看到的题目顺序和选项顺序将随机打乱</div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="publishDialogVisible=false">取消</el-button>
@@ -99,7 +104,7 @@
     </el-dialog>
 
     <!-- 实时监控 -->
-    <el-dialog v-model="monitorDialogVisible" title="考试实时监控" width="900px">
+    <el-dialog v-model="monitorDialogVisible" title="考试实时监控" width="900px" @close="stopAutoRefresh">
       <div class="monitor-stats">
         <el-row :gutter="20">
           <el-col :span="6"><el-tag size="large">应考: {{monitorData.totalCount}}</el-tag></el-col>
@@ -108,12 +113,18 @@
           <el-col :span="6"><el-tag type="danger" size="large">异常: {{monitorData.abnormalCount}}</el-tag></el-col>
         </el-row>
       </div>
+      <el-alert 
+        title="监控页面每10秒自动刷新数据" 
+        type="info" 
+        :closable="false" 
+        style="margin-top: 10px" 
+      />
       <el-table :data="monitorData.students" style="margin-top:20px">
         <el-table-column prop="studentNo" label="学号" width="120" />
         <el-table-column prop="realName" label="姓名" width="100" />
         <el-table-column label="状态" width="120">
           <template #default="{row}">
-            <el-tag :type="row.status===1?'success':'warning'">{{row.statusText}}</el-tag>
+            <el-tag :type="row.status>=1?'success':'warning'">{{row.statusText}}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="progress" label="进度" width="150">
@@ -121,9 +132,29 @@
             <el-progress :percentage="row.progress" />
           </template>
         </el-table-column>
+        <el-table-column label="切屏次数" width="100">
+          <template #default="{row}">
+            <el-tag :type="row.switchCount > 3 ? 'danger' : 'info'">{{row.switchCount || 0}}次</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="异常情况" width="150">
+          <template #default="{row}">
+            <el-tag v-if="row.abnormal" type="danger" effect="dark">
+              <el-icon><Warning /></el-icon>
+              {{row.abnormalReason || '异常'}}
+            </el-tag>
+            <el-tag v-else type="success">正常</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="150">
           <template #default="{row}">
-            <el-button type="primary" link size="small" @click="handleForceSubmit(row)">强制交卷</el-button>
+            <el-button 
+              type="danger" 
+              link 
+              size="small" 
+              @click="handleForceSubmit(row)"
+              :disabled="row.status >= 1"
+            >强制交卷</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -189,13 +220,76 @@
         <el-button @click="detailDialogVisible=false">关闭</el-button>
       </template>
     </el-dialog>
+
+    <!-- 试卷预览 -->
+    <el-dialog v-model="paperPreviewDialogVisible" :title="'试卷预览: ' + (previewPaper?.paperName || '')" width="900px" top="5vh">
+      <div class="preview-header">
+        <el-descriptions :column="3" border>
+          <el-descriptions-item label="科目">{{ previewPaper?.subject }}</el-descriptions-item>
+          <el-descriptions-item label="总分">{{ previewPaper?.totalScore }}分</el-descriptions-item>
+          <el-descriptions-item label="时长">{{ previewPaper?.duration }}分钟</el-descriptions-item>
+          <el-descriptions-item label="难度">
+            <el-tag :type="getDifficultyTagType(previewPaper?.difficulty)" size="small">
+              {{ getDifficultyText(previewPaper?.difficulty) }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="题目数量">{{ previewQuestions.length }}题</el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="getStatusTagType(previewPaper?.status)" size="small">
+              {{ getStatusTextForPaper(previewPaper?.status) }}
+            </el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
+      
+      <el-divider content-position="left">试卷内容</el-divider>
+      
+      <div v-loading="previewLoading" class="preview-content">
+        <div v-if="previewQuestions.length === 0" class="empty-tip">
+          <el-empty description="该试卷暂无题目" />
+        </div>
+        <div v-else class="question-list">
+          <div v-for="(q, index) in previewQuestions" :key="q.id" class="question-item">
+            <div class="question-header">
+              <span class="question-number">{{ index + 1 }}.</span>
+              <el-tag size="small" :type="getTypeTagType(q.type)">{{ getTypeText(q.type) }}</el-tag>
+              <el-tag size="small" :type="getDifficultyTagType(q.difficulty)">{{ getDifficultyText(q.difficulty) }}</el-tag>
+              <span class="question-score">（{{ q.score }}分）</span>
+            </div>
+            <div class="question-content">{{ q.content }}</div>
+            
+            <!-- 显示选项 -->
+            <div v-if="q.type === 1 || q.type === 2" class="question-options">
+              <div v-if="q.optionA" class="option-item">A. {{ q.optionA }}</div>
+              <div v-if="q.optionB" class="option-item">B. {{ q.optionB }}</div>
+              <div v-if="q.optionC" class="option-item">C. {{ q.optionC }}</div>
+              <div v-if="q.optionD" class="option-item">D. {{ q.optionD }}</div>
+            </div>
+            
+            <!-- 显示答案 -->
+            <div v-if="q.answer" class="question-answer">
+              <strong>答案：</strong>{{ q.answer }}
+            </div>
+            
+            <!-- 显示解析 -->
+            <div v-if="q.analysis" class="question-analysis">
+              <strong>解析：</strong>{{ q.analysis }}
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <template #footer>
+        <el-button @click="paperPreviewDialogVisible=false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Warning } from '@element-plus/icons-vue'
 import { 
   getExamList, 
   publishExam, 
@@ -203,10 +297,12 @@ import {
   deleteExam,
   getExamMonitor,
   extendExamTime,
+  forceSubmitExam,
   getMyClasses,
   getPaperList,
   getExamDetail,
-  getStudentsByClassId
+  getStudentsByClassId,
+  getPaperQuestions
 } from '@/api/teacher/index'
 
 const loading = ref(false)
@@ -216,6 +312,7 @@ const publishDialogVisible = ref(false)
 const monitorDialogVisible = ref(false)
 const extendDialogVisible = ref(false)
 const detailDialogVisible = ref(false)
+const paperPreviewDialogVisible = ref(false)
 const isEdit = ref(false)
 const currentEditId = ref(null)
 const pagination = reactive({ pageNum: 1, pageSize: 10 })
@@ -225,7 +322,8 @@ const examForm = reactive({
   paperId: null, 
   classId: null, 
   startTime: '', 
-  endTime: '' 
+  endTime: '',
+  shuffleEnabled: 1 // 默认启用乱序
 })
 const monitorData = reactive({ 
   totalCount: 0, 
@@ -242,6 +340,10 @@ const extendForm = reactive({
   reason: '' 
 })
 const currentExam = ref({})
+const monitorInterval = ref(null) // 定时器
+const previewLoading = ref(false)
+const previewPaper = ref({})
+const previewQuestions = ref([])
 
 // 试卷列表和班级列表
 const paperList = ref([])
@@ -396,6 +498,7 @@ const resetForm = () => {
   examForm.classId = null
   examForm.startTime = ''
   examForm.endTime = ''
+  examForm.shuffleEnabled = 1 // 重置为默认启用乱序
 }
 
 const handleMonitor = async (row) => {
@@ -409,9 +512,37 @@ const handleMonitor = async (row) => {
       monitorData.students = res.data.students || []
     }
     monitorDialogVisible.value = true
+    
+    // 启动自动刷新
+    startAutoRefresh(row.id)
   } catch (error) {
     console.error('获取监控数据失败:', error)
     ElMessage.error('获取监控数据失败')
+  }
+}
+
+const startAutoRefresh = (examId) => {
+  stopAutoRefresh() // 清除之前的定时器
+  monitorInterval.value = setInterval(async () => {
+    try {
+      const res = await getExamMonitor(examId)
+      if (res.data) {
+        monitorData.totalCount = res.data.totalCount || 0
+        monitorData.submittedCount = res.data.submittedCount || 0
+        monitorData.examiningCount = res.data.examiningCount || 0
+        monitorData.abnormalCount = res.data.abnormalCount || 0
+        monitorData.students = res.data.students || []
+      }
+    } catch (error) {
+      console.error('自动刷新监控数据失败:', error)
+    }
+  }, 10000) // 每10秒刷新一次
+}
+
+const stopAutoRefresh = () => {
+  if (monitorInterval.value) {
+    clearInterval(monitorInterval.value)
+    monitorInterval.value = null
   }
 }
 
@@ -487,6 +618,8 @@ const handleEdit = async (row) => {
       // 处理时间格式
       examForm.startTime = res.data.startTime ? new Date(res.data.startTime) : ''
       examForm.endTime = res.data.endTime ? new Date(res.data.endTime) : ''
+      // 加载乱序设置，默认启用
+      examForm.shuffleEnabled = res.data.shuffleEnabled !== undefined ? res.data.shuffleEnabled : 1
       publishDialogVisible.value = true
     }
   } catch (error) {
@@ -510,7 +643,7 @@ const handleDelete = async (row) => {
 const handleForceSubmit = async (row) => {
   await ElMessageBox.confirm(`确定强制 ${row.realName} 交卷?`, '提示', { type: 'warning' })
   try {
-    // TODO: 调用强制交卷API
+    await forceSubmitExam(extendForm.examId, row.studentId || row.id)
     ElMessage.success('已强制交卷')
     handleMonitor({ id: extendForm.examId })
   } catch (error) {
@@ -518,6 +651,48 @@ const handleForceSubmit = async (row) => {
     ElMessage.error('强制交卷失败')
   }
 }
+
+const handlePreviewPaper = async (row) => {
+  // 获取试卷ID
+  if (!row.paperId) {
+    ElMessage.warning('该考试暂无关联试卷')
+    return
+  }
+  
+  previewPaper.value = { id: row.paperId, paperName: row.paperName }
+  paperPreviewDialogVisible.value = true
+  previewLoading.value = true
+  previewQuestions.value = []
+  
+  try {
+    const res = await getPaperQuestions(row.paperId)
+    if (res.data) {
+      previewQuestions.value = res.data
+      // 如果试卷基本信息不完整，从第一题推断
+      if (previewQuestions.value.length > 0) {
+        // 计算总分
+        const totalScore = previewQuestions.value.reduce((sum, q) => sum + (parseFloat(q.score) || 0), 0)
+        previewPaper.value.totalScore = totalScore
+        previewPaper.value.subject = row.subject || previewQuestions.value[0].subject || ''
+        previewPaper.value.difficulty = 2
+        previewPaper.value.duration = row.duration || 120
+        previewPaper.value.status = 'published'
+      }
+    }
+  } catch (error) {
+    console.error('获取试卷题目失败:', error)
+    ElMessage.error('获取试卷题目失败')
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+const getStatusTagType = (s) => ({ published: 'success', unpublished: 'info', ended: 'warning' }[s] || '')
+const getStatusTextForPaper = (s) => ({ published: '已发布', unpublished: '未发布', ended: '已结束' }[s] || '')
+const getDifficultyTagType = (d) => ({ 1: 'success', 2: 'warning', 3: 'danger' }[d] || '')
+const getDifficultyText = (d) => ({ 1: '易', 2: '中', 3: '难' }[d] || '')
+const getTypeTagType = (t) => ({ 1: 'primary', 2: 'warning', 3: 'success', 4: 'info', 5: 'danger' }[t] || '')
+const getTypeText = (t) => ({ 1: '单选题', 2: '多选题', 3: '判断题', 4: '填空题', 5: '简答题' }[t] || '')
 
 const getStatusType = (s) => ({ 0: 'info', 1: 'success', 2: 'warning' }[s] || '')
 const getStatusText = (s) => ({ 0: '未开始', 1: '进行中', 2: '已结束' }[s] || '')

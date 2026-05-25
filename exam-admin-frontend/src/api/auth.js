@@ -1,10 +1,11 @@
 import request from '@/utils/request'
 
 // 获取验证码
-export function getCaptcha() {
+export function getCaptcha(params) {
   return request({
     url: '/auth/captcha',
-    method: 'get'
+    method: 'get',
+    params
   }).catch(error => {
     console.error('获取验证码接口调用失败:', error)
     throw error

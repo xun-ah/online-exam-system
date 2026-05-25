@@ -19,8 +19,10 @@ public class StudentExamService {
     
     /**
      * 根据试卷配置获取题目列表
+     * @param questionConfig 试卷题目配置
+     * @param shuffleEnabled 是否启用乱序 0-否 1-是
      */
-    public List<Map<String, Object>> getExamQuestions(String questionConfig) {
+    public List<Map<String, Object>> getExamQuestions(String questionConfig, Integer shuffleEnabled) {
         if (questionConfig == null || questionConfig.isEmpty()) {
             return new ArrayList<>();
         }
@@ -34,10 +36,16 @@ public class StudentExamService {
             }
             
             List<Map<String, Object>> result = new ArrayList<>();
+            
+            // 1. 题目乱序：打乱题目顺序（仅在启用乱序时）
+            List<JSONObject> questionsList = questionsArray.toList(JSONObject.class);
+            if (shuffleEnabled != null && shuffleEnabled == 1) {
+                Collections.shuffle(questionsList);
+            }
+            
             int questionNumber = 1;
             
-            for (int i = 0; i < questionsArray.size(); i++) {
-                JSONObject questionItem = questionsArray.getJSONObject(i);
+            for (JSONObject questionItem : questionsList) {
                 Long questionId = questionItem.getLong("questionId");
                 BigDecimal score = questionItem.getBigDecimal("score");
                 
@@ -56,12 +64,26 @@ public class StudentExamService {
                     if (question.getOptions() != null && !question.getOptions().isEmpty()) {
                         try {
                             JSONObject optionsJson = JSONUtil.parseObj(question.getOptions());
-                            questionData.put("optionA", optionsJson.getStr("A"));
-                            questionData.put("optionB", optionsJson.getStr("B"));
-                            questionData.put("optionC", optionsJson.getStr("C"));
-                            questionData.put("optionD", optionsJson.getStr("D"));
+                            
+                            // 2. 选项乱序：收集非空选项并打乱顺序
+                            List<Map.Entry<String, String>> optionsEntries = new ArrayList<>();
+                            if (optionsJson.containsKey("A") && optionsJson.getStr("A") != null) 
+                                optionsEntries.add(new AbstractMap.SimpleEntry<>("A", optionsJson.getStr("A")));
+                            if (optionsJson.containsKey("B") && optionsJson.getStr("B") != null) 
+                                optionsEntries.add(new AbstractMap.SimpleEntry<>("B", optionsJson.getStr("B")));
+                            if (optionsJson.containsKey("C") && optionsJson.getStr("C") != null) 
+                                optionsEntries.add(new AbstractMap.SimpleEntry<>("C", optionsJson.getStr("C")));
+                            if (optionsJson.containsKey("D") && optionsJson.getStr("D") != null) 
+                                optionsEntries.add(new AbstractMap.SimpleEntry<>("D", optionsJson.getStr("D")));
+                            
+                            Collections.shuffle(optionsEntries);
+                            
+                            // 将乱序后的选项按顺序赋给 A, B, C, D
+                            String[] keys = {"A", "B", "C", "D"};
+                            for (int i = 0; i < Math.min(optionsEntries.size(), 4); i++) {
+                                questionData.put("option" + keys[i], optionsEntries.get(i).getValue());
+                            }
                         } catch (Exception e) {
-                            // 如果解析失败，记录日志但不阻塞
                             System.err.println("解析选项失败，题目ID: " + questionId + ", 选项数据: " + question.getOptions());
                             e.printStackTrace();
                         }

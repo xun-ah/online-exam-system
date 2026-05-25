@@ -3,12 +3,17 @@ package com.exam.controller;
 import com.exam.annotation.SysLog;
 import com.exam.common.Result;
 import com.exam.entity.Subject;
+import com.exam.entity.Teacher;
+import com.exam.mapper.TeacherClassMapper;
+import com.exam.mapper.TeacherMapper;
 import com.exam.service.SubjectService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/subject")
@@ -20,16 +25,72 @@ public class SubjectController {
     @Autowired
     private JdbcTemplate jdbcTemplate;
     
+    @Autowired
+    private TeacherMapper teacherMapper;
+    
+    @Autowired
+    private TeacherClassMapper teacherClassMapper;
+    
     /**
-     * 获取教师所属院系的科目列表
+     * 获取教师任教的科目列表（用于题库管理等场景）
+     */
+    @GetMapping("/my-subjects")
+    public Result<List<Subject>> getMySubjects(@RequestAttribute("userId") Long userId) {
+        // 获取教师信息
+        Teacher teacher = teacherMapper.selectByUserId(userId);
+        if (teacher == null) {
+            return Result.success(new ArrayList<>());
+        }
+        
+        // 查询教师任教的所有科目名称
+        List<String> subjectNames = teacherClassMapper.selectDistinctSubjectsByTeacherId(teacher.getId());
+        
+        if (subjectNames == null || subjectNames.isEmpty()) {
+            return Result.success(new ArrayList<>());
+        }
+        
+        // 获取本院系所有科目，然后过滤出教师任教的科目
+        List<Subject> allSubjects = subjectService.getActiveSubjects(teacher.getDepartmentId());
+        List<Subject> mySubjects = allSubjects.stream()
+                .filter(s -> subjectNames.contains(s.getName()))
+                .collect(Collectors.toList());
+        
+        return Result.success(mySubjects);
+    }
+    
+    /**
+     * 获取教师任教的科目列表（用于题库管理、批量导入等场景）
      */
     @GetMapping("/list")
     public Result<List<Subject>> getSubjectList(@RequestAttribute("userId") Long userId) {
-        // TODO: 根据userId查询教师所属院系ID
-        // 这里简化处理，需要查询teacher表获取department_id
-        Long departmentId = getDepartmentIdByUserId(userId);
-        List<Subject> subjects = subjectService.getActiveSubjects(departmentId);
-        return Result.success(subjects);
+        // 获取教师信息
+        Teacher teacher = teacherMapper.selectByUserId(userId);
+        if (teacher == null) {
+            System.out.println("[SubjectController] 未找到教师信息, userId=" + userId);
+            return Result.success(new ArrayList<>());
+        }
+        
+        System.out.println("[SubjectController] 教师信息: id=" + teacher.getId() + ", name=" + teacher.getRealName() + ", deptId=" + teacher.getDepartmentId());
+        
+        // 查询教师任教的所有科目名称
+        List<String> subjectNames = teacherClassMapper.selectDistinctSubjectsByTeacherId(teacher.getId());
+        System.out.println("[SubjectController] 教师任教科目: " + subjectNames);
+        
+        if (subjectNames == null || subjectNames.isEmpty()) {
+            return Result.success(new ArrayList<>());
+        }
+        
+        // 获取本院系所有科目，然后过滤出教师任教的科目
+        List<Subject> allSubjects = subjectService.getActiveSubjects(teacher.getDepartmentId());
+        System.out.println("[SubjectController] 本院系所有科目: " + allSubjects.stream().map(Subject::getName).collect(java.util.stream.Collectors.toList()));
+        
+        List<Subject> mySubjects = allSubjects.stream()
+                .filter(s -> subjectNames.contains(s.getName()))
+                .collect(Collectors.toList());
+        
+        System.out.println("[SubjectController] 最终返回科目: " + mySubjects.stream().map(Subject::getName).collect(java.util.stream.Collectors.toList()));
+        
+        return Result.success(mySubjects);
     }
     
     /**

@@ -30,7 +30,8 @@ export function exportScores(params) {
   return request({
     url: '/teacher/students/export',
     method: 'get',
-    params
+    params,
+    responseType: 'blob'
   })
 }
 
@@ -48,5 +49,31 @@ export function getClassListByDepartment(params) {
     url: '/teacher/students/classes',
     method: 'get',
     params
+  })
+}
+
+// 新增学生
+export function addStudent(data) {
+  return request({
+    url: '/teacher/students',
+    method: 'post',
+    data
+  })
+}
+
+// 更新学生信息
+export function updateStudent(id, data) {
+  return request({
+    url: `/teacher/students/${id}`,
+    method: 'put',
+    data
+  })
+}
+
+// 删除学生
+export function deleteStudent(id) {
+  return request({
+    url: `/teacher/students/${id}`,
+    method: 'delete'
   })
 }

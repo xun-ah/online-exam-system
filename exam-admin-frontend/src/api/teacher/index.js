@@ -47,11 +47,29 @@ export function batchDeleteQuestions(ids) {
 }
 
 // 批量导入题目
-export function batchImportQuestions(data) {
+export function batchImportQuestions(file, subject) {
+  const formData = new FormData()
+  formData.append('file', file)
+  if (subject) {
+    formData.append('subject', subject)
+  }
   return request({
     url: '/teacher/questions/batch-import',
     method: 'post',
-    data
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+}
+
+// 批量导出题目
+export function exportQuestions(params) {
+  return request({
+    url: '/teacher/questions/batch-export',
+    method: 'get',
+    params,
+    responseType: 'blob'
   })
 }
 
@@ -107,6 +125,14 @@ export function autoComposePaper(data) {
     url: '/teacher/papers/auto-compose',
     method: 'post',
     data
+  })
+}
+
+// 获取试卷题目列表（用于预览）
+export function getPaperQuestions(paperId) {
+  return request({
+    url: `/teacher/papers/${paperId}/questions`,
+    method: 'get'
   })
 }
 
@@ -185,7 +211,8 @@ export function exportExamScores(params) {
   return request({
     url: '/teacher/grading/export',
     method: 'get',
-    params
+    params,
+    responseType: 'blob'
   })
 }
 
@@ -229,6 +256,14 @@ export function extendExamTime(data) {
     url: '/teacher/exams/extend-time',
     method: 'post',
     data
+  })
+}
+
+// 强制学生交卷
+export function forceSubmitExam(examId, studentId) {
+  return request({
+    url: `/teacher/exams/${examId}/force-submit/${studentId}`,
+    method: 'post'
   })
 }
 
@@ -290,10 +325,18 @@ export function getStudentsByClassId(classId) {
 
 // ==================== 科目管理 ====================
 
-// 获取科目列表
+// 获取科目列表（教师任教的科目）
 export function getSubjectList() {
   return request({
     url: '/subject/list',
+    method: 'get'
+  })
+}
+
+// 获取所有科目（包括禁用的，管理员使用）
+export function getAllSubjects() {
+  return request({
+    url: '/subject/all',
     method: 'get'
   })
 }

@@ -30,5 +30,24 @@ public interface QuestionMapper {
               @Param("keyword") String keyword,
               @Param("subject") String subject);
     
+    /**
+     * 根据条件查询题目列表（无分页，用于导出）
+     */
+    List<Question> selectListByCondition(@Param("teacherId") Long teacherId,
+                                         @Param("type") Integer type,
+                                         @Param("difficulty") Integer difficulty,
+                                         @Param("keyword") String keyword,
+                                         @Param("subject") String subject);
+    
     int countByTeacherId(@Param("teacherId") Long teacherId);
+    
+    /**
+     * 统计本月新增题目数
+     */
+    int countByTeacherIdAndMonth(@Param("teacherId") Long teacherId);
+    
+    /**
+     * 统计覆盖科目数
+     */
+    int countDistinctSubjectByTeacherId(@Param("teacherId") Long teacherId);
 }

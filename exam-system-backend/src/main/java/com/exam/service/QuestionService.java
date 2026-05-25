@@ -59,4 +59,12 @@ public class QuestionService {
     public int countQuestions(Long teacherId) {
         return questionMapper.countByTeacherId(teacherId);
     }
+    
+    /**
+     * 根据条件获取所有题目（用于导出）
+     */
+    public List<Question> getQuestionsByCondition(Long teacherId, Integer type, Integer difficulty,
+                                                  String keyword, String subject) {
+        return questionMapper.selectListByCondition(teacherId, type, difficulty, keyword, subject);
+    }
 }

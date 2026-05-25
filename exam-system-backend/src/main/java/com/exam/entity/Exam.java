@@ -22,8 +22,11 @@ public class Exam {
     
     private Long classId; // 考试班级ID
     private String className; // 班级名称（关联查询）
+    private String subject; // 科目（从试卷关联查询）
     
     private Integer status; // 0-未开始 1-进行中 2-已结束
+    
+    private Integer shuffleEnabled; // 是否启用乱序 0-否 1-是
     
     private LocalDateTime createTime;
     

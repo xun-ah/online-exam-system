@@ -126,4 +126,29 @@ public class AuthService {
         
         return userRows > 0;
     }
+    
+    /**
+     * 重置密码（通过手机号验证）
+     */
+    public boolean resetPassword(String username, String phone, String newPassword) {
+        // 根据用户名查找用户
+        User user = userMapper.selectByUsername(username);
+        if (user == null) {
+            return false;
+        }
+        
+        // 验证手机号是否匹配
+        if (user.getPhone() == null || !user.getPhone().equals(phone)) {
+            return false;
+        }
+        
+        // 加密新密码
+        String hashedPassword = BCrypt.hashpw(newPassword, BCrypt.gensalt());
+        
+        // 更新密码
+        user.setPassword(hashedPassword);
+        int rows = userMapper.updateById(user);
+        
+        return rows > 0;
+    }
 }

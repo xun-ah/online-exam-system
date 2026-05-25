@@ -10,7 +10,7 @@ public class Question {
     
     private String questionNo; // 题目编号
     
-    private Integer type; // 1-单选题 2-多选题 3-判断题 4-填空题 5-简答题
+    private Integer type; // 1-单选题 2-多选题 3-判断题 4-填空题 5-简答题 6-编程题
     
     private String content; // 题目内容
     
@@ -29,6 +29,16 @@ public class Question {
     private String knowledgePoint; // 知识点
     
     private Integer difficulty; // 难度 1-简单 2-中等 3-困难
+    
+    private String language; // 编程语言（编程题专用）
+    
+    private String codeTemplate; // 代码模板（编程题专用）
+    
+    private String testCases; // 测试用例（JSON格式，编程题专用）
+    
+    private Integer timeLimit; // 时间限制（毫秒，编程题专用）
+    
+    private Integer memoryLimit; // 内存限制（MB，编程题专用）
     
     private LocalDateTime createTime;
     

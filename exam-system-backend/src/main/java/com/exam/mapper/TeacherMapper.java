@@ -48,4 +48,9 @@ public interface TeacherMapper {
      * 根据教师ID查询覆盖学生数量
      */
     int countStudentsByTeacherId(@Param("teacherId") Long teacherId);
+    
+    /**
+     * 根据教师ID查询任教科目数量
+     */
+    int countSubjectsByTeacherId(@Param("teacherId") Long teacherId);
 }

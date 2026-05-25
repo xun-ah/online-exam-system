@@ -47,4 +47,9 @@ public interface TeacherClassMapper {
      * 检查教师是否负责某个班级
      */
     TeacherClass selectByTeacherAndClass(@Param("teacherId") Long teacherId, @Param("classId") Long classId);
+    
+    /**
+     * 查询教师任教的所有科目（去重）
+     */
+    List<String> selectDistinctSubjectsByTeacherId(@Param("teacherId") Long teacherId);
 }

@@ -45,10 +45,16 @@
     <!-- 操作按钮 -->
     <el-card class="action-card" shadow="never">
       <div class="action-bar">
-        <el-button type="success" @click="handleExport">
-          <el-icon><Download /></el-icon>
-          导出成绩
-        </el-button>
+        <div class="left-buttons">
+          <el-button type="primary" @click="handleAdd">
+            <el-icon><Plus /></el-icon>
+            新增学生
+          </el-button>
+          <el-button type="success" @click="handleExport">
+            <el-icon><Download /></el-icon>
+            导出成绩
+          </el-button>
+        </div>
         <div class="right-info">
           共 {{ total }} 名学生
         </div>
@@ -70,10 +76,12 @@
         <el-table-column prop="departmentName" label="院系" width="180" />
         <el-table-column prop="phone" label="联系电话" width="150" />
         <el-table-column prop="email" label="邮箱" min-width="200" show-overflow-tooltip />
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
+            <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button type="primary" link size="small" @click="handleViewScores(row)">成绩</el-button>
             <el-button type="primary" link size="small" @click="handleViewDetail(row)">详情</el-button>
+            <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -132,22 +140,89 @@
         <el-descriptions-item label="院系">{{ currentStudent.departmentName }}</el-descriptions-item>
       </el-descriptions>
     </el-dialog>
+
+    <!-- 新增/编辑学生对话框 -->
+    <el-dialog v-model="formDialogVisible" :title="formDialogTitle" width="600px">
+      <el-alert v-if="!isEdit" title="提示" type="info" :closable="false" style="margin-bottom: 20px;">
+        <template #default>
+          <p style="margin: 0;">新增学生账号的<strong>默认密码为：123456</strong>，请通知学生首次登录后及时修改密码。</p>
+        </template>
+      </el-alert>
+      <el-form :model="studentForm" :rules="rules" ref="studentFormRef" label-width="100px">
+        <el-form-item label="学号" prop="studentNo">
+          <el-input v-model="studentForm.studentNo" :disabled="isEdit" placeholder="请输入学号" />
+        </el-form-item>
+        <el-form-item label="姓名" prop="realName">
+          <el-input v-model="studentForm.realName" placeholder="请输入姓名" />
+        </el-form-item>
+        <el-form-item label="性别" prop="gender">
+          <el-radio-group v-model="studentForm.gender">
+            <el-radio :label="1">男</el-radio>
+            <el-radio :label="2">女</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="院系" prop="departmentId">
+          <el-select v-model="studentForm.departmentId" placeholder="请选择院系" style="width: 100%" @change="handleFormDepartmentChange">
+            <el-option
+              v-for="dept in departmentOptions"
+              :key="dept.id"
+              :label="dept.deptName || dept.name"
+              :value="dept.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="班级" prop="classId">
+          <el-select v-model="studentForm.classId" placeholder="请选择班级" style="width: 100%">
+            <el-option
+              v-for="cls in formClassOptions"
+              :key="cls.id"
+              :label="cls.className || cls.name"
+              :value="cls.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="联系电话" prop="phone">
+          <el-input v-model="studentForm.phone" placeholder="请输入联系电话" />
+        </el-form-item>
+        <el-form-item label="邮箱" prop="email">
+          <el-input v-model="studentForm.email" placeholder="请输入邮箱" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="formDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleFormSubmit">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Download } from '@element-plus/icons-vue'
-import { getStudentList, getStudentScores, exportScores, getTeacherDepartment, getClassListByDepartment } from '@/api/teacher/student'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Download, Plus } from '@element-plus/icons-vue'
+import { 
+  getStudentList, 
+  getStudentScores, 
+  exportScores, 
+  getTeacherDepartment, 
+  getClassListByDepartment,
+  addStudent,
+  updateStudent,
+  deleteStudent
+} from '@/api/teacher/student'
 
 const loading = ref(false)
 const studentList = ref([])
 const total = ref(0)
 const scoreDialogVisible = ref(false)
 const detailDialogVisible = ref(false)
+const formDialogVisible = ref(false)
+const isEdit = ref(false)
+const formDialogTitle = ref('')
+const studentFormRef = ref(null)
 const departmentOptions = ref([])
 const classOptions = ref([])
+const formClassOptions = ref([])
 
 const currentStudent = reactive({
   id: null,
@@ -173,6 +248,36 @@ const pagination = reactive({
 })
 
 const scoreList = ref([])
+
+const studentForm = reactive({
+  id: null,
+  studentNo: '',
+  realName: '',
+  gender: 1,
+  departmentId: null,
+  classId: null,
+  phone: '',
+  email: ''
+})
+
+const rules = {
+  studentNo: [
+    { required: true, message: '请输入学号', trigger: 'blur' },
+    { pattern: /^[0-9]+$/, message: '学号只能为数字', trigger: 'blur' }
+  ],
+  realName: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
+  gender: [{ required: true, message: '请选择性别', trigger: 'change' }],
+  departmentId: [{ required: true, message: '请选择院系', trigger: 'change' }],
+  classId: [{ required: true, message: '请选择班级', trigger: 'change' }],
+  phone: [
+    { required: true, message: '请输入联系电话', trigger: 'blur' },
+    { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号码', trigger: 'blur' }
+  ],
+  email: [
+    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    { type: 'email', message: '请输入正确的邮箱地址', trigger: 'blur' }
+  ]
+}
 
 // 获取教师所属院系
 const fetchTeacherDepartment = async () => {
@@ -270,11 +375,143 @@ const handleViewDetail = (row) => {
 // 导出成绩
 const handleExport = async () => {
   try {
-    await exportScores({ classId: searchForm.classId })
+    const res = await exportScores({ classId: searchForm.classId })
+    
+    // 处理blob响应，创建下载链接
+    const blob = new Blob([res], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = '学生成绩_' + new Date().getTime() + '.xlsx'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
     ElMessage.success('导出成功')
   } catch (error) {
     console.error('导出失败:', error)
     ElMessage.error('导出失败')
+  }
+}
+
+// 新增学生
+const handleAdd = () => {
+  isEdit.value = false
+  formDialogTitle.value = '新增学生'
+  resetForm()
+  studentForm.departmentId = searchForm.departmentId
+  if (searchForm.departmentId) {
+    fetchFormClasses(searchForm.departmentId)
+  }
+  formDialogVisible.value = true
+}
+
+// 编辑学生
+const handleEdit = (row) => {
+  isEdit.value = true
+  formDialogTitle.value = '编辑学生'
+  Object.assign(studentForm, {
+    id: row.id,
+    studentNo: row.studentNo,
+    realName: row.realName,
+    gender: row.gender,
+    departmentId: row.departmentId,
+    classId: row.classId,
+    phone: row.phone,
+    email: row.email
+  })
+  
+  // 加载该院系的班级列表
+  if (row.departmentId) {
+    fetchFormClasses(row.departmentId)
+  }
+  
+  formDialogVisible.value = true
+}
+
+// 删除学生
+const handleDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除学生“${row.realName}”吗？删除后无法恢复。`,
+      '提示',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    await deleteStudent(row.id)
+    ElMessage.success('删除成功')
+    fetchStudents()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除失败:', error)
+      ElMessage.error('删除失败')
+    }
+  }
+}
+
+// 表单院系变化
+const handleFormDepartmentChange = (departmentId) => {
+  studentForm.classId = null
+  formClassOptions.value = []
+  if (departmentId) {
+    fetchFormClasses(departmentId)
+  }
+}
+
+// 获取表单班级列表
+const fetchFormClasses = async (departmentId) => {
+  try {
+    const res = await getClassListByDepartment({ departmentId })
+    formClassOptions.value = res.data || []
+  } catch (error) {
+    console.error('获取班级列表失败:', error)
+  }
+}
+
+// 重置表单
+const resetForm = () => {
+  Object.assign(studentForm, {
+    id: null,
+    studentNo: '',
+    realName: '',
+    gender: 1,
+    departmentId: null,
+    classId: null,
+    phone: '',
+    email: ''
+  })
+  if (studentFormRef.value) {
+    studentFormRef.value.resetFields()
+  }
+}
+
+// 表单提交
+const handleFormSubmit = async () => {
+  if (!studentFormRef.value) return
+  
+  try {
+    await studentFormRef.value.validate()
+    
+    if (isEdit.value) {
+      await updateStudent(studentForm.id, studentForm)
+      ElMessage.success('更新成功')
+    } else {
+      await addStudent(studentForm)
+      ElMessage.success('新增成功')
+    }
+    
+    formDialogVisible.value = false
+    fetchStudents()
+  } catch (error) {
+    if (error !== false) {
+      console.error('提交失败:', error)
+      ElMessage.error('提交失败')
+    }
   }
 }
 
@@ -322,6 +559,11 @@ onMounted(() => {
     display: flex;
     justify-content: space-between;
     align-items: center;
+
+    .left-buttons {
+      display: flex;
+      gap: 10px;
+    }
 
     .right-info {
       color: #909399;

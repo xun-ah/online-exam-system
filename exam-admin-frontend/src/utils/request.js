@@ -31,7 +31,13 @@ request.interceptors.request.use(
 // 响应拦截器
 request.interceptors.response.use(
   (response) => {
-    console.log('收到响应:', response.config.url, response.data)
+    console.log('收到响应:', response.config.url, response.status)
+    
+    // 处理blob类型的响应（文件下载），直接返回
+    if (response.config.responseType === 'blob') {
+      return response.data
+    }
+    
     const res = response.data
     
     // 后端返回的标准格式

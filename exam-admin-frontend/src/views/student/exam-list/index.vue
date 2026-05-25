@@ -13,9 +13,15 @@
           <el-card v-for="exam in filteredExamList" :key="exam.id" class="exam-card" :class="getExamStatusClass(exam.status)">
             <div class="exam-header">
               <h3 class="exam-name">{{ exam.examName }}</h3>
-              <el-tag :type="getStatusType(exam.status)" size="large">
-                {{ getStatusText(exam.status) }}
-              </el-tag>
+              <div class="status-tags">
+                <el-tag :type="getStatusType(exam.status)" size="large">
+                  {{ getStatusText(exam.status) }}
+                </el-tag>
+                <el-tag v-if="exam.absentReason" type="danger" size="large" effect="dark">
+                  <el-icon><WarningFilled /></el-icon>
+                  未参加
+                </el-tag>
+              </div>
             </div>
             
             <div class="exam-info">
@@ -38,6 +44,10 @@
               <div class="info-item">
                 <el-icon><Timer /></el-icon>
                 <span>考试时长：{{ exam.duration || 0 }} 分钟</span>
+              </div>
+              <div v-if="exam.absentReason" class="info-item absent-reason">
+                <el-icon><WarningFilled /></el-icon>
+                <span>{{ exam.absentReason }}</span>
               </div>
             </div>
             
@@ -93,9 +103,15 @@
           <el-card v-for="exam in filteredExamList" :key="exam.id" class="exam-card" :class="getExamStatusClass(exam.status)">
             <div class="exam-header">
               <h3 class="exam-name">{{ exam.examName }}</h3>
-              <el-tag :type="getStatusType(exam.status)" size="large">
-                {{ getStatusText(exam.status) }}
-              </el-tag>
+              <div class="status-tags">
+                <el-tag :type="getStatusType(exam.status)" size="large">
+                  {{ getStatusText(exam.status) }}
+                </el-tag>
+                <el-tag v-if="exam.absentReason" type="danger" size="large" effect="dark">
+                  <el-icon><WarningFilled /></el-icon>
+                  未参加
+                </el-tag>
+              </div>
             </div>
             
             <div class="exam-info">
@@ -118,6 +134,10 @@
               <div class="info-item">
                 <el-icon><Timer /></el-icon>
                 <span>考试时长：{{ exam.duration || 0 }} 分钟</span>
+              </div>
+              <div v-if="exam.absentReason" class="info-item absent-reason">
+                <el-icon><WarningFilled /></el-icon>
+                <span>{{ exam.absentReason }}</span>
               </div>
             </div>
             
@@ -173,9 +193,15 @@
           <el-card v-for="exam in filteredExamList" :key="exam.id" class="exam-card" :class="getExamStatusClass(exam.status)">
             <div class="exam-header">
               <h3 class="exam-name">{{ exam.examName }}</h3>
-              <el-tag :type="getStatusType(exam.status)" size="large">
-                {{ getStatusText(exam.status) }}
-              </el-tag>
+              <div class="status-tags">
+                <el-tag :type="getStatusType(exam.status)" size="large">
+                  {{ getStatusText(exam.status) }}
+                </el-tag>
+                <el-tag v-if="exam.absentReason" type="danger" size="large" effect="dark">
+                  <el-icon><WarningFilled /></el-icon>
+                  未参加
+                </el-tag>
+              </div>
             </div>
             
             <div class="exam-info">
@@ -198,6 +224,10 @@
               <div class="info-item">
                 <el-icon><Timer /></el-icon>
                 <span>考试时长：{{ exam.duration || 0 }} 分钟</span>
+              </div>
+              <div v-if="exam.absentReason" class="info-item absent-reason">
+                <el-icon><WarningFilled /></el-icon>
+                <span>{{ exam.absentReason }}</span>
               </div>
             </div>
             
@@ -257,7 +287,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { 
   Document, School, Calendar, Clock, Timer, 
-  VideoPlay, Lock, CircleClose 
+  VideoPlay, Lock, CircleClose, WarningFilled, CircleCheck
 } from '@element-plus/icons-vue'
 import { getPendingExamList } from '@/api/student'
 
@@ -413,6 +443,12 @@ onMounted(() => {
       color: #303133;
       flex: 1;
     }
+    
+    .status-tags {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
   }
   
   .exam-info {
@@ -431,6 +467,20 @@ onMounted(() => {
       .el-icon {
         color: #409EFF;
         font-size: 16px;
+      }
+      
+      &.absent-reason {
+        grid-column: 1 / -1;
+        color: #F56C6C;
+        font-weight: 500;
+        background-color: #FEF0F0;
+        padding: 8px 12px;
+        border-radius: 4px;
+        border-left: 3px solid #F56C6C;
+        
+        .el-icon {
+          color: #F56C6C;
+        }
       }
     }
   }

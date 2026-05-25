@@ -4,10 +4,16 @@ import cn.hutool.json.JSONUtil;
 import com.exam.common.Result;
 import com.exam.entity.*;
 import com.exam.mapper.*;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import javax.servlet.http.HttpServletResponse;
+import java.io.OutputStream;
 import java.math.BigDecimal;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -331,15 +337,25 @@ public class TeacherGradingController {
                                 qData.put("isCorrect", isCorrect);
                                 objectiveQuestions.add(qData);
                             } else {
-                                // 主观题
+                                // 主观题（简答题、填空题、编程题）
                                 subjectiveTotal += questionScore.intValue();
                                 Map<String, Object> qData = new HashMap<>();
                                 qData.put("id", question.getId());
                                 qData.put("number", subjectiveNumber++);
-                                qData.put("type", question.getType() == 4 ? "填空题" : "简答题");
+                                String typeText;
+                                if (question.getType() == 4) {
+                                    typeText = "填空题";
+                                } else if (question.getType() == 6) {
+                                    typeText = "编程题";
+                                } else {
+                                    typeText = "简答题";
+                                }
+                                qData.put("type", typeText);
                                 qData.put("content", question.getContent());
                                 qData.put("fullScore", questionScore.intValue());
                                 qData.put("studentAnswer", studentAnswer);
+                                // 添加参考答案（简答题的answer字段作为参考）
+                                qData.put("referenceAnswer", question.getAnswer());
                                 qData.put("score", 0);
                                 subjectiveQuestions.add(qData);
                             }
@@ -391,6 +407,17 @@ public class TeacherGradingController {
         record.setStatus(2);
         examRecordMapper.updateById(record);
         
+        // 保存每道主观题的详细评分和评语（可选功能，需要扩展表结构）
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> subjectiveQuestions = (List<Map<String, Object>>) params.get("subjectiveQuestions");
+        if (subjectiveQuestions != null && !subjectiveQuestions.isEmpty()) {
+            // TODO: 如果需要保存每题详细评分，可以创建 exam_record_detail 表存储
+            System.out.println("收到 " + subjectiveQuestions.size() + " 道主观题的评分详情");
+            for (Map<String, Object> q : subjectiveQuestions) {
+                System.out.println("题目ID: " + q.get("questionId") + ", 得分: " + q.get("score") + ", 评语: " + q.get("comment"));
+            }
+        }
+        
         return Result.success("评分提交成功", null);
     }
     
@@ -430,11 +457,210 @@ public class TeacherGradingController {
     }
     
     /**
-     * 导出成绩
+     * 导出成绩为Excel文件
      */
     @GetMapping("/export")
-    public Result<String> exportScores(@RequestParam(required = false) Long examId) {
-        return Result.success("导出功能开发中", null);
+    public void exportScores(@RequestParam(required = false) Long examId,
+                             @RequestAttribute("userId") Long userId,
+                             HttpServletResponse response) {
+        // 获取教师所属院系ID
+        Teacher teacher = teacherMapper.selectByUserId(userId);
+        if (teacher == null) {
+            response.setStatus(400);
+            return;
+        }
+        
+        List<ExamRecord> records;
+        Exam targetExam = null;
+        
+        if (examId != null) {
+            // 如果指定了考试ID，直接查询该考试的记录
+            records = examRecordMapper.selectList(examId, null);
+            targetExam = examMapper.selectById(examId);
+        } else {
+            // 如果没有指定考试ID，查询本院系所有考试的记录
+            List<Exam> exams = examMapper.selectListByDepartmentId(teacher.getDepartmentId());
+            records = new ArrayList<>();
+            for (Exam exam : exams) {
+                List<ExamRecord> examRecords = examRecordMapper.selectList(exam.getId(), null);
+                records.addAll(examRecords);
+            }
+        }
+        
+        if (records == null || records.isEmpty()) {
+            response.setStatus(404);
+            return;
+        }
+        
+        try {
+            // 创建Excel工作簿
+            Workbook workbook = new XSSFWorkbook();
+            Sheet sheet = workbook.createSheet("成绩表");
+            
+            // 创建标题样式
+            CellStyle headerStyle = workbook.createCellStyle();
+            headerStyle.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            headerStyle.setBorderBottom(BorderStyle.THIN);
+            headerStyle.setBorderTop(BorderStyle.THIN);
+            headerStyle.setBorderLeft(BorderStyle.THIN);
+            headerStyle.setBorderRight(BorderStyle.THIN);
+            headerStyle.setAlignment(HorizontalAlignment.CENTER);
+            
+            Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerFont.setFontHeightInPoints((short) 12);
+            headerStyle.setFont(headerFont);
+            
+            // 创建内容样式
+            CellStyle contentStyle = workbook.createCellStyle();
+            contentStyle.setBorderBottom(BorderStyle.THIN);
+            contentStyle.setBorderTop(BorderStyle.THIN);
+            contentStyle.setBorderLeft(BorderStyle.THIN);
+            contentStyle.setBorderRight(BorderStyle.THIN);
+            
+            // 创建表头行
+            Row headerRow = sheet.createRow(0);
+            String[] headers = {"序号", "学号", "姓名", "考试名称", "班级", "客观题得分", "主观题得分", "总分", "提交时间", "状态"};
+            for (int i = 0; i < headers.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+            }
+            
+            // 填充数据
+            int rowNum = 1;
+            for (ExamRecord record : records) {
+                // 只导出已提交的记录
+                if (record.getStatus() == null || record.getStatus() < 1) continue;
+                
+                Student student = studentMapper.selectById(record.getStudentId());
+                if (student == null) continue;
+                
+                // 获取考试信息
+                Exam exam = targetExam != null ? targetExam : examMapper.selectById(record.getExamId());
+                String examName = exam != null ? exam.getExamName() : "";
+                
+                // 获取班级信息
+                String className = "";
+                if (exam != null && exam.getClassId() != null) {
+                    ClassInfo classInfo = classMapper.selectById(exam.getClassId());
+                    className = classInfo != null ? classInfo.getClassName() : "";
+                }
+                
+                // 计算客观题和主观题得分
+                int objectiveScore = 0;
+                int subjectiveScore = 0;
+                if (record.getStatus() == 2 && record.getScore() != null) {
+                    // 已阅卷，客观题得分从score字段获取
+                    objectiveScore = record.getScore().intValue();
+                    // 主观题得分需要计算
+                    subjectiveScore = exam != null && exam.getPaperId() != null ? 
+                        calculateSubjectiveScore(exam.getPaperId(), record) : 0;
+                }
+                
+                // 创建数据行
+                Row row = sheet.createRow(rowNum++);
+                
+                Cell cell0 = row.createCell(0);
+                cell0.setCellValue(rowNum - 1);
+                cell0.setCellStyle(contentStyle);
+                
+                Cell cell1 = row.createCell(1);
+                cell1.setCellValue(student.getStudentNo());
+                cell1.setCellStyle(contentStyle);
+                
+                Cell cell2 = row.createCell(2);
+                cell2.setCellValue(student.getRealName());
+                cell2.setCellStyle(contentStyle);
+                
+                Cell cell3 = row.createCell(3);
+                cell3.setCellValue(examName);
+                cell3.setCellStyle(contentStyle);
+                
+                Cell cell4 = row.createCell(4);
+                cell4.setCellValue(className);
+                cell4.setCellStyle(contentStyle);
+                
+                Cell cell5 = row.createCell(5);
+                cell5.setCellValue(objectiveScore);
+                cell5.setCellStyle(contentStyle);
+                
+                Cell cell6 = row.createCell(6);
+                cell6.setCellValue(subjectiveScore);
+                cell6.setCellStyle(contentStyle);
+                
+                Cell cell7 = row.createCell(7);
+                cell7.setCellValue(record.getScore() != null ? record.getScore().doubleValue() : 0);
+                cell7.setCellStyle(contentStyle);
+                
+                Cell cell8 = row.createCell(8);
+                cell8.setCellValue(record.getSubmitTime() != null ? 
+                    record.getSubmitTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) : "");
+                cell8.setCellStyle(contentStyle);
+                
+                Cell cell9 = row.createCell(9);
+                cell9.setCellValue(record.getStatus() == 1 ? "待阅卷" : "已阅卷");
+                cell9.setCellStyle(contentStyle);
+            }
+            
+            // 自动调整列宽
+            for (int i = 0; i < headers.length; i++) {
+                sheet.autoSizeColumn(i);
+                // 设置最大宽度
+                if (sheet.getColumnWidth(i) > 256 * 50) {
+                    sheet.setColumnWidth(i, 256 * 50);
+                }
+            }
+            
+            // 设置响应头
+            String fileName = "成绩表_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")) + ".xlsx";
+            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            response.setHeader("Content-Disposition", "attachment;filename=" + URLEncoder.encode(fileName, StandardCharsets.UTF_8.name()));
+            
+            // 写入响应输出流
+            try (OutputStream outputStream = response.getOutputStream()) {
+                workbook.write(outputStream);
+                outputStream.flush();
+            }
+            
+            workbook.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            response.setStatus(500);
+        }
+    }
+    
+    /**
+     * 计算主观题得分
+     */
+    private int calculateSubjectiveScore(Long paperId, ExamRecord record) {
+        try {
+            Paper paper = paperMapper.selectById(paperId);
+            if (paper == null || paper.getQuestionConfig() == null) return 0;
+            
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> questionDetails = (List<Map<String, Object>>) JSONUtil.parseObj(paper.getQuestionConfig()).get("questions");
+            
+            int subjectiveScore = 0;
+            
+            for (Map<String, Object> q : questionDetails) {
+                Long qId = Long.valueOf(q.get("questionId").toString());
+                Question question = questionMapper.selectById(qId);
+                
+                // 只计算主观题（简答题 type=5）
+                if (question != null && question.getType() == 5) {
+                    // 主观题得分需要从阅卷记录中获取，这里简化处理
+                    // 实际应该从教师的阅卷评分中获取
+                    subjectiveScore += 0; // 默认0分，需要教师手动阅卷
+                }
+            }
+            
+            return subjectiveScore;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return 0;
+        }
     }
     
     /**

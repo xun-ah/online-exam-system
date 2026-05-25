@@ -23,7 +23,6 @@ public class AdminTeacherController {
     @Autowired
     private TeacherClassService teacherClassService;
     
-    @SysLog("查询教师列表")
     @GetMapping
     public Result<PageResult<Teacher>> getTeacherList(
             @RequestParam(required = false) String teacherNo,
@@ -65,7 +64,6 @@ public class AdminTeacherController {
         return Result.success();
     }
     
-    @SysLog("查询教师负责的班级")
     @GetMapping("/{id}/classes")
     public Result<List<TeacherClass>> getTeacherClasses(@PathVariable Long id) {
         List<TeacherClass> list = teacherClassService.getClassesByTeacherId(id);

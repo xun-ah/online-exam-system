@@ -14,6 +14,11 @@
         <result column="answer" property="answer"/>
         <result column="analysis" property="analysis"/>
         <result column="options" property="options"/>
+        <result column="language" property="language"/>
+        <result column="code_template" property="codeTemplate"/>
+        <result column="test_cases" property="testCases"/>
+        <result column="time_limit" property="timeLimit"/>
+        <result column="memory_limit" property="memoryLimit"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
         <result column="deleted" property="deleted"/>
@@ -21,7 +26,7 @@
     
     <sql id="Base_Column_List">
         id, question_no, content, type, difficulty, score, teacher_id, subject,
-        answer, analysis, options, create_time, update_time, deleted
+        answer, analysis, options, language, code_template, test_cases, time_limit, memory_limit, create_time, update_time, deleted
     </sql>
     
     <select id="selectById" resultMap="BaseResultMap">
@@ -49,15 +54,37 @@
         <if test="subject != null and subject != ''">
             AND subject = #{subject}
         </if>
-        ORDER BY create_time DESC
+        ORDER BY id ASC
         LIMIT #{offset}, #{limit}
+    </select>
+    
+    <select id="selectListByCondition" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM question
+        WHERE deleted = 0
+        <if test="teacherId != null">
+            AND teacher_id = #{teacherId}
+        </if>
+        <if test="type != null">
+            AND type = #{type}
+        </if>
+        <if test="difficulty != null">
+            AND difficulty = #{difficulty}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND content LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+        <if test="subject != null and subject != ''">
+            AND subject = #{subject}
+        </if>
+        ORDER BY id ASC
     </select>
     
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO question (question_no, content, type, difficulty, score, teacher_id, subject,
-                             answer, analysis, options)
+                             answer, analysis, options, language, code_template, test_cases, time_limit, memory_limit)
         VALUES (#{questionNo}, #{content}, #{type}, #{difficulty}, #{score}, #{teacherId}, #{subject},
-                #{answer}, #{analysis}, #{options})
+                #{answer}, #{analysis}, #{options}, #{language}, #{codeTemplate}, #{testCases}, #{timeLimit}, #{memoryLimit})
     </insert>
     
     <update id="updateById">
@@ -72,6 +99,11 @@
             <if test="answer != null">answer = #{answer},</if>
             <if test="analysis != null">analysis = #{analysis},</if>
             <if test="options != null">options = #{options},</if>
+            <if test="language != null">language = #{language},</if>
+            <if test="codeTemplate != null">code_template = #{codeTemplate},</if>
+            <if test="testCases != null">test_cases = #{testCases},</if>
+            <if test="timeLimit != null">time_limit = #{timeLimit},</if>
+            <if test="memoryLimit != null">memory_limit = #{memoryLimit},</if>
         </set>
         WHERE id = #{id}
     </update>
@@ -105,6 +137,25 @@
         <if test="teacherId != null">
             AND teacher_id = #{teacherId}
         </if>
+    </select>
+    
+    <select id="countByTeacherIdAndMonth" resultType="int">
+        SELECT COUNT(*) FROM question 
+        WHERE deleted = 0
+        <if test="teacherId != null">
+            AND teacher_id = #{teacherId}
+        </if>
+        AND YEAR(create_time) = YEAR(CURDATE()) 
+        AND MONTH(create_time) = MONTH(CURDATE())
+    </select>
+    
+    <select id="countDistinctSubjectByTeacherId" resultType="int">
+        SELECT COUNT(DISTINCT subject) FROM question 
+        WHERE deleted = 0
+        <if test="teacherId != null">
+            AND teacher_id = #{teacherId}
+        </if>
+        AND subject IS NOT NULL AND subject != ''
     </select>
     
 </mapper>

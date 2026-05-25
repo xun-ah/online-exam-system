@@ -127,11 +127,13 @@
 
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Document, TrendCharts, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import { getScoreList, getScoreTrend, getKnowledgeRadar } from '@/api/student/index'
 import * as echarts from 'echarts'
 
+const router = useRouter()
 const loading = ref(false)
 const scoreList = ref([])
 const trendChartRef = ref(null)
@@ -176,49 +178,123 @@ const initTrendChart = async () => {
     const res = await getScoreTrend()
     if (res.data && res.data.length > 0 && trendChartRef.value) {
       const chart = echarts.init(trendChartRef.value)
+      
+      const examNames = res.data.map(item => item.examName)
+      const scores = res.data.map(item => item.score)
+      
+      // 根据分数设置点的颜色
+      const itemColors = scores.map(score => {
+        if (score >= 90) return '#67c23a'
+        if (score >= 80) return '#409eff'
+        if (score >= 60) return '#e6a23c'
+        return '#f56c6c'
+      })
+      
       const option = {
         tooltip: {
           trigger: 'axis',
-          formatter: '{b}: {c}分'
+          formatter: function(params) {
+            const item = params[0]
+            const score = item.value
+            let status = score >= 60 ? '及格' : '不及格'
+            return `${item.name}<br/>分数: ${score}分<br/>状态: ${status}`
+          }
         },
         xAxis: {
           type: 'category',
-          data: res.data.map(item => item.examName),
+          data: examNames,
           axisLabel: {
-            rotate: 30,
-            interval: 0
+            rotate: 20,
+            interval: 0,
+            fontSize: 12
+          },
+          axisLine: {
+            lineStyle: {
+              color: '#ddd'
+            }
           }
         },
         yAxis: {
           type: 'value',
-          name: '分数'
+          name: '分数',
+          min: 0,
+          max: 100,
+          axisLine: {
+            lineStyle: {
+              color: '#ddd'
+            }
+          },
+          splitLine: {
+            lineStyle: {
+              color: '#f0f0f0',
+              type: 'dashed'
+            }
+          }
         },
         series: [{
-          data: res.data.map(item => item.score),
+          data: scores.map((score, index) => ({
+            value: score,
+            itemStyle: {
+              color: itemColors[index]
+            }
+          })),
           type: 'line',
           smooth: true,
+          symbol: 'circle',
+          symbolSize: 8,
           lineStyle: {
             color: '#409eff',
             width: 3
-          },
-          itemStyle: {
-            color: '#409eff'
           },
           areaStyle: {
             color: {
               type: 'linear',
               x: 0, y: 0, x2: 0, y2: 1,
               colorStops: [
-                { offset: 0, color: 'rgba(64, 158, 255, 0.3)' },
-                { offset: 1, color: 'rgba(64, 158, 255, 0.05)' }
+                { offset: 0, color: 'rgba(64, 158, 255, 0.25)' },
+                { offset: 1, color: 'rgba(64, 158, 255, 0.02)' }
               ]
             }
           }
         }],
+        // 添加及格线
+        visualMap: {
+          show: false,
+          pieces: [{
+            gte: 60,
+            lte: 100,
+            color: '#67c23a'
+          }, {
+            gte: 0,
+            lt: 60,
+            color: '#f56c6c'
+          }],
+          outOfRange: {
+            color: '#999'
+          }
+        },
+        markLine: {
+          data: [{
+            yAxis: 60,
+            name: '及格线',
+            lineStyle: {
+              color: '#f56c6c',
+              type: 'dashed',
+              width: 2
+            },
+            label: {
+              formatter: '及格线 60分',
+              position: 'end',
+              color: '#f56c6c',
+              fontSize: 12
+            }
+          }],
+          silent: true
+        },
         grid: {
           left: '10%',
           right: '5%',
-          bottom: '15%',
+          bottom: '18%',
           top: '10%'
         }
       }
@@ -238,14 +314,37 @@ const initRadarChart = async () => {
       const chart = echarts.init(radarChartRef.value)
       const option = {
         tooltip: {
-          trigger: 'item'
+          trigger: 'item',
+          formatter: function(params) {
+            return `${params.name}: ${params.value}分`
+          }
         },
         radar: {
           indicator: res.data.map(item => ({
             name: item.name,
             max: 100
           })),
-          radius: '65%'
+          radius: '65%',
+          // 只显示外圈，隐藏内部同心圆
+          splitNumber: 1,
+          axisName: {
+            color: '#303133',
+            fontSize: 13,
+            fontWeight: 'bold'
+          },
+          splitArea: {
+            show: false
+          },
+          axisLine: {
+            lineStyle: {
+              color: '#ddd'
+            }
+          },
+          splitLine: {
+            lineStyle: {
+              color: '#eee'
+            }
+          }
         },
         series: [{
           type: 'radar',
@@ -253,20 +352,56 @@ const initRadarChart = async () => {
             value: res.data.map(item => item.score),
             name: '掌握度',
             areaStyle: {
-              color: 'rgba(64, 158, 255, 0.3)'
+              color: {
+                type: 'linear',
+                x: 0, y: 0, x2: 0, y2: 1,
+                colorStops: [
+                  { offset: 0, color: 'rgba(64, 158, 255, 0.4)' },
+                  { offset: 1, color: 'rgba(64, 158, 255, 0.1)' }
+                ]
+              }
             },
             lineStyle: {
               color: '#409eff',
               width: 2
             },
             itemStyle: {
-              color: '#409eff'
+              color: '#409eff',
+              borderColor: '#fff',
+              borderWidth: 2
+            },
+            // 显示每个顶点的分数标签
+            label: {
+              show: true,
+              formatter: function(params) {
+                return params.value
+              },
+              color: '#409eff',
+              fontSize: 12,
+              fontWeight: 'bold',
+              position: 'top'
             }
           }]
         }]
       }
       chart.setOption(option)
       window.addEventListener('resize', () => chart.resize())
+    } else if (radarChartRef.value) {
+      // 没有数据时显示提示
+      const chart = echarts.init(radarChartRef.value)
+      const option = {
+        graphic: {
+          type: 'text',
+          left: 'center',
+          top: 'center',
+          style: {
+            text: '暂无考试数据',
+            fontSize: 14,
+            fill: '#909399'
+          }
+        }
+      }
+      chart.setOption(option)
     }
   } catch (error) {
     console.error('获取知识点数据失败:', error)
@@ -275,8 +410,10 @@ const initRadarChart = async () => {
 
 // 查看详情
 const viewDetail = (row) => {
-  ElMessage.info(`查看考试 ${row.examName} 的详情`)
-  // TODO: 跳转到考试详情页面
+  router.push({
+    name: 'ScoreDetail',
+    query: { recordId: row.id }
+  })
 }
 
 // 格式化时间

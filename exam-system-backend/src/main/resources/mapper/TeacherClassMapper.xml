@@ -67,4 +67,13 @@
         DELETE FROM teacher_class WHERE class_id = #{classId}
     </delete>
 
+    <select id="selectDistinctSubjectsByTeacherId" resultType="java.lang.String">
+        SELECT DISTINCT s.name
+        FROM teacher_class tc
+        LEFT JOIN subject s ON tc.subject_id = s.id
+        WHERE tc.teacher_id = #{teacherId}
+          AND s.name IS NOT NULL
+          AND s.deleted = 0
+    </select>
+
 </mapper>

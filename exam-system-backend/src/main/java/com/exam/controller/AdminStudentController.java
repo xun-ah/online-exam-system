@@ -19,7 +19,6 @@ public class AdminStudentController {
     @Autowired
     private StudentService studentService;
     
-    @SysLog("查询学生列表")
     @GetMapping
     public Result<PageResult<Student>> getStudentList(
             @RequestParam(required = false) String studentNo,

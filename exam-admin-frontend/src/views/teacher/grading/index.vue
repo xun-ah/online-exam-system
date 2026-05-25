@@ -199,9 +199,24 @@
     </el-dialog>
 
     <!-- 阅卷对话框 -->
-    <el-dialog v-model="gradeDialogVisible" title="在线阅卷" width="900px">
+    <el-dialog v-model="gradeDialogVisible" title="在线阅卷" width="1000px" top="5vh">
       <div class="grading-content">
-        <el-alert type="info" :closable="false">客观题已自动批改，请对主观题进行评分</el-alert>
+        <el-alert type="info" :closable="false">
+          <template #default>
+            客观题已自动批改，请对主观题进行评分。
+            <span v-if="currentRecord.studentName">当前学生：<strong>{{currentRecord.studentName}}</strong> ({{currentRecord.studentNo}})</span>
+          </template>
+        </el-alert>
+        
+        <!-- 学生信息 -->
+        <el-descriptions :column="3" border style="margin-top:15px;margin-bottom:15px">
+          <el-descriptions-item label="学号">{{currentRecord.studentNo}}</el-descriptions-item>
+          <el-descriptions-item label="姓名">{{currentRecord.studentName}}</el-descriptions-item>
+          <el-descriptions-item label="待评题目">
+            <el-tag type="warning">{{subjectiveQuestions.length}}题</el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+        
         <div class="question-list">
           <div v-for="q in subjectiveQuestions" :key="q.id" class="question-item">
             <div class="question-header">
@@ -209,27 +224,62 @@
               <span class="question-type">{{q.type}}</span>
               <span class="question-score">满分: {{q.fullScore}}分</span>
             </div>
-            <div class="question-content">{{q.content}}</div>
-            <div class="student-answer">
-              <h5>学生答案:</h5>
-              <p>{{q.studentAnswer}}</p>
+            
+            <div class="question-section">
+              <h5><el-icon><Document /></el-icon> 题目内容:</h5>
+              <p class="content-text">{{q.content}}</p>
             </div>
+            
+            <div class="reference-answer-section" v-if="q.referenceAnswer">
+              <h5><el-icon><Reading /></el-icon> 参考答案:</h5>
+              <div class="answer-text">{{q.referenceAnswer}}</div>
+            </div>
+            
+            <div class="student-answer-section">
+              <h5><el-icon><User /></el-icon> 学生答案:</h5>
+              <div class="answer-text student-text">{{q.studentAnswer || '(未作答)'}}</div>
+            </div>
+            
             <div class="grading-section">
-              <h5>评分:</h5>
-              <el-input-number v-model="q.score" :min="0" :max="q.fullScore" size="small" />
-              <span style="margin-left:10px">/ {{q.fullScore}}分</span>
+              <div class="grading-left">
+                <h5>评分:</h5>
+                <el-input-number v-model="q.score" :min="0" :max="q.fullScore" size="large" :precision="0" />
+                <span class="score-text">/ {{q.fullScore}}分</span>
+              </div>
+              <div class="grading-right">
+                <el-input 
+                  v-model="q.comment" 
+                  type="textarea" 
+                  :rows="2" 
+                  placeholder="请输入评分评语（可选，如：思路清晰、步骤完整等）" 
+                />
+              </div>
             </div>
           </div>
         </div>
+        
+        <!-- 评分汇总 -->
+        <div class="grading-summary">
+          <el-divider />
+          <div class="summary-row">
+            <span>当前总分:</span>
+            <span class="total-score">{{subjectiveQuestions.reduce((sum, q) => sum + (q.score || 0), 0)}}分</span>
+          </div>
+        </div>
       </div>
-      <template #footer><el-button @click="gradeDialogVisible=false">取消</el-button><el-button type="primary" @click="submitGrade">提交评分</el-button></template>
+      <template #footer>
+        <el-button @click="gradeDialogVisible=false">取消</el-button>
+        <el-button type="success" @click="saveGrade" :loading="saving">保存进度</el-button>
+        <el-button type="primary" @click="submitGrade" :loading="submitting">提交评分</el-button>
+      </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Document, Reading, User } from '@element-plus/icons-vue'
 import { 
   getPendingGrading, 
   getGradedRecords, 
@@ -265,6 +315,8 @@ const currentRecord = reactive({
   studentNo: ''
 })
 const subjectiveQuestions = ref([])
+const submitting = ref(false)
+const saving = ref(false)
 const searchForm = reactive({ examId: null, classId: null })
 const statsForm = reactive({ examId: null })
 
@@ -344,11 +396,54 @@ const handleGrade = async (row) => {
   }
 }
 
-// 提交阅卷
-const submitGrade = async () => {
+// 保存评分进度
+const saveGrade = async () => {
+  saving.value = true
   try {
     const data = {
       recordId: currentRecord.recordId,
+      subjectiveQuestions: subjectiveQuestions.value.map(q => ({
+        questionId: q.id,
+        score: q.score || 0,
+        comment: q.comment || ''
+      })),
+      subjectiveScore: subjectiveQuestions.value.reduce((sum, q) => sum + (q.score || 0), 0)
+    }
+    await submitGrading(data)
+    ElMessage.success('评分进度已保存')
+  } catch (error) {
+    console.error('保存失败:', error)
+    ElMessage.error('保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+// 提交阅卷
+const submitGrade = async () => {
+  // 验证是否所有题目都已评分
+  const ungraded = subjectiveQuestions.value.filter(q => q.score === null || q.score === undefined)
+  if (ungraded.length > 0) {
+    try {
+      await ElMessageBox.confirm(
+        `还有 ${ungraded.length} 道题目未评分，确定要提交吗？未评分的题目将计为0分。`,
+        '提示',
+        { confirmButtonText: '确定提交', cancelButtonText: '继续评分', type: 'warning' }
+      )
+    } catch {
+      return // 用户取消
+    }
+  }
+  
+  submitting.value = true
+  try {
+    const data = {
+      recordId: currentRecord.recordId,
+      subjectiveQuestions: subjectiveQuestions.value.map(q => ({
+        questionId: q.id,
+        score: q.score || 0,
+        comment: q.comment || ''
+      })),
       subjectiveScore: subjectiveQuestions.value.reduce((sum, q) => sum + (q.score || 0), 0)
     }
     await submitGrading(data)
@@ -359,6 +454,8 @@ const submitGrade = async () => {
   } catch (error) {
     console.error('提交评分失败:', error)
     ElMessage.error('提交评分失败')
+  } finally {
+    submitting.value = false
   }
 }
 
@@ -426,7 +523,26 @@ const fetchClasses = async () => {
 // 导出成绩
 const handleExport = async () => {
   try {
-    await exportExamScores({ examId: statsForm.examId })
+    const res = await exportExamScores({ examId: statsForm.examId })
+    
+    // 检查是否返回了错误（错误时返回的是JSON格式的blob）
+    if (res.type === 'application/json') {
+      const text = await res.text()
+      const errorData = JSON.parse(text)
+      ElMessage.error(errorData.message || '导出失败')
+      return
+    }
+    
+    // 处理blob响应，创建下载链接
+    const blob = new Blob([res], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = '成绩导出_' + new Date().getTime() + '.xlsx'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
     ElMessage.success('导出成功')
   } catch (error) {
     console.error('导出失败:', error)
@@ -481,14 +597,119 @@ watch(activeTab, (newVal) => {
 .breadcrumb { margin-bottom: 20px; }
 .tab-card { border-radius: 8px; }
 .search-form { margin-bottom: 10px; }
-.grading-content .question-list { margin-top: 20px; }
-.question-item { padding: 20px; margin-bottom: 20px; border: 1px solid #ebeef5; border-radius: 8px; }
-.question-header { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
-.question-number { font-weight: bold; font-size: 16px; }
-.question-type { color: #909399; }
-.question-score { margin-left: auto; color: #409eff; }
-.question-content, .student-answer { margin-bottom: 15px; line-height: 1.6; }
-.student-answer h5 { margin: 0 0 10px 0; }
-.grading-section { display: flex; align-items: center; gap: 10px; padding: 15px; background: #f9f9f9; border-radius: 6px; }
-.grading-section h5 { margin: 0; }
+
+/* 阅卷对话框样式 */
+.grading-content .question-list { margin-top: 20px; max-height: 60vh; overflow-y: auto; }
+.question-item { 
+  padding: 20px; 
+  margin-bottom: 20px; 
+  border: 1px solid #ebeef5; 
+  border-radius: 8px;
+  background: #fff;
+}
+.question-header { 
+  display: flex; 
+  align-items: center; 
+  gap: 10px; 
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #409eff;
+}
+.question-number { font-weight: bold; font-size: 16px; color: #303133; }
+.question-type { color: #909399; font-size: 14px; }
+.question-score { margin-left: auto; color: #409eff; font-weight: bold; }
+
+.question-section, .reference-answer-section, .student-answer-section {
+  margin-bottom: 15px;
+}
+.question-section h5, .reference-answer-section h5, .student-answer-section h5 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #606266;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.content-text, .answer-text {
+  line-height: 1.8;
+  padding: 12px;
+  border-radius: 6px;
+  background: #f5f7fa;
+  font-size: 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.student-text {
+  background: #fef0f0;
+  border-left: 3px solid #f56c6c;
+}
+.reference-answer-section .answer-text {
+  background: #f0f9ff;
+  border-left: 3px solid #409eff;
+}
+
+.grading-section {
+  display: flex;
+  gap: 20px;
+  padding: 15px;
+  background: linear-gradient(to right, #f9f9f9, #ffffff);
+  border-radius: 6px;
+  border: 1px solid #e4e7ed;
+}
+.grading-left {
+  flex: 0 0 250px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.grading-left h5 {
+  margin: 0;
+  white-space: nowrap;
+}
+.score-text {
+  color: #909399;
+  font-size: 14px;
+}
+.grading-right {
+  flex: 1;
+}
+
+/* 评分汇总 */
+.grading-summary {
+  margin-top: 20px;
+}
+.summary-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 15px;
+  font-size: 16px;
+}
+.total-score {
+  font-size: 24px;
+  font-weight: bold;
+  color: #67c23a;
+}
+
+/* 详情对话框样式 */
+.question-detail-item {
+  margin-bottom: 20px;
+  padding: 15px;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+}
+.question-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ebeef5;
+}
+.question-detail-content h5,
+.answer-detail h5 {
+  margin: 10px 0 5px 0;
+  font-size: 14px;
+  color: #606266;
+}
 </style>

@@ -17,7 +17,6 @@ public class DepartmentController {
     @Autowired
     private DepartmentService departmentService;
     
-    @SysLog("查询院系列表")
     @GetMapping
     public Result<PageResult<Department>> getDepartmentList(
             @RequestParam(defaultValue = "1") int pageNum,

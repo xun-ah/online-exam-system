@@ -13,6 +13,12 @@ const routes = [
     meta: { title: '登录' }
   },
   {
+    path: '/forgot-password',
+    name: 'ForgotPassword',
+    component: () => import('@/views/login/forgot-password.vue'),
+    meta: { title: '重置密码' }
+  },
+  {
     path: '/admin',
     component: () => import('@/layout/admin.vue'),
     redirect: '/admin/dashboard',
@@ -191,6 +197,12 @@ const routes = [
         meta: { title: '历史考试', icon: 'Document' }
       },
       {
+        path: 'score-detail',
+        name: 'ScoreDetail',
+        component: () => import('@/views/student/score-detail/index.vue'),
+        meta: { title: '考试详情', requiresAuth: true, role: 3 }
+      },
+      {
         path: 'wrong-book',
         name: 'WrongBook',
         component: () => import('@/views/student/wrong-book/index.vue'),
@@ -230,8 +242,8 @@ router.beforeEach((to, from, next) => {
   // 设置页面标题
   document.title = to.meta.title ? `${to.meta.title} - 在线考试系统` : '在线考试系统'
   
-  // 访问登录页
-  if (to.path === '/login') {
+  // 访问登录页或重置密码页
+  if (to.path === '/login' || to.path === '/forgot-password') {
     // 如果已经登录，跳转到对应角色的首页
     if (token && userInfo) {
       const roleRoutes = {

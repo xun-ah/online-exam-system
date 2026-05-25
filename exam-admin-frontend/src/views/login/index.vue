@@ -112,7 +112,7 @@
           <!-- 记住密码和忘记密码 -->
           <div class="form-options">
             <el-checkbox v-model="loginForm.remember">记住密码</el-checkbox>
-            <el-link type="primary" :underline="false" class="forgot-link">忘记密码？</el-link>
+            <el-link type="primary" :underline="false" class="forgot-link" @click="handleForgotPassword">忘记密码？</el-link>
           </div>
           
           <!-- 登录按钮 -->
@@ -150,7 +150,7 @@
           <!-- 底部链接 -->
           <div class="bottom-links">
             <span>还没有账号？</span>
-            <el-link type="primary" :underline="false" class="contact-link">联系管理员</el-link>
+            <el-link type="primary" :underline="false" class="contact-link" @click="handleContactAdmin">联系管理员</el-link>
           </div>
         </el-form>
       </div>
@@ -196,7 +196,8 @@ const rules = {
 // 刷新验证码
 const refreshCaptcha = async () => {
   try {
-    const res = await getCaptcha()
+    // 传递username参数，让后端将验证码与该用户名绑定
+    const res = await getCaptcha({ username: loginForm.username })
     captchaCode.value = res.data.captcha
     console.log('验证码获取成功:', res.data.captcha)
   } catch (error) {
@@ -249,6 +250,18 @@ const handleLogin = async () => {
           console.error('[Login] 登录返回数据异常:', res)
           ElMessage.error('登录返回数据异常')
           return
+        }
+        
+        // 处理记住密码（仅记住账号和角色）
+        if (loginForm.remember) {
+          localStorage.setItem('rememberedUsername', loginForm.username)
+          localStorage.setItem('rememberedRole', loginForm.role)
+          // 清除可能存在的旧密码记录
+          localStorage.removeItem('rememberedPassword')
+        } else {
+          localStorage.removeItem('rememberedUsername')
+          localStorage.removeItem('rememberedRole')
+          localStorage.removeItem('rememberedPassword')
         }
         
         // 保存Token和用户信息
@@ -308,9 +321,46 @@ const handleLogin = async () => {
   })
 }
 
+// 忘记密码
+const handleForgotPassword = () => {
+  router.push('/forgot-password')
+}
+
+// 联系管理员
+const handleContactAdmin = () => {
+  ElMessage.info('请联系系统管理员：admin@exam.com 或拨打 13800138000')
+}
+
+// 监听用户名变化，自动刷新验证码
+import { watch } from 'vue'
+
+watch(() => loginForm.username, () => {
+  if (loginForm.username) {
+    refreshCaptcha()
+  }
+})
+
 onMounted(() => {
   console.log('登录页面加载完成')
   refreshCaptcha()
+  
+  // 加载记住的账号
+  const rememberedUsername = localStorage.getItem('rememberedUsername')
+  const rememberedRole = localStorage.getItem('rememberedRole')
+  
+  if (rememberedUsername) {
+    loginForm.username = rememberedUsername
+    loginForm.remember = true
+    if (rememberedRole) {
+      loginForm.role = rememberedRole
+    }
+    // 如果有记住的用户名，延迟刷新验证码（在服务检测后）
+    setTimeout(() => {
+      if (serverOnline.value) {
+        refreshCaptcha()
+      }
+    }, 500)
+  }
 })
 </script>
 

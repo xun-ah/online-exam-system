@@ -9,15 +9,15 @@ spring:
   application:
     name: exam-system-backend
   
-  # 全局 CORS 配置
-  web:
-    cors:
-      enabled: true
-      allowed-origins: "*"
-      allowed-methods: "*"
-      allowed-headers: "*"
-      allow-credentials: true
-      max-age: 3600
+  # 全局 CORS 配置（与CorsFilter冲突，已禁用）
+  # web:
+  #   cors:
+  #     enabled: true
+  #     allowed-origins: "*"
+  #     allowed-methods: "*"
+  #     allowed-headers: "*"
+  #     allow-credentials: true
+  #     max-age: 3600
   
   # 数据源配置
   datasource:

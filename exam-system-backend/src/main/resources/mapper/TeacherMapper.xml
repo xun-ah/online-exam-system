@@ -132,4 +132,11 @@
         WHERE tc.teacher_id = #{teacherId}
     </select>
     
+    <!-- 根据教师ID查询任教科目数量 -->
+    <select id="countSubjectsByTeacherId" resultType="int">
+        SELECT COUNT(DISTINCT subject_id) 
+        FROM teacher_class 
+        WHERE teacher_id = #{teacherId} AND subject_id IS NOT NULL
+    </select>
+    
 </mapper>

@@ -3,8 +3,11 @@ package com.exam.controller;
 import com.exam.annotation.SysLog;
 import com.exam.common.PageResult;
 import com.exam.common.Result;
+import com.exam.entity.Paper;
 import com.exam.entity.Question;
 import com.exam.entity.Teacher;
+import com.exam.mapper.PaperMapper;
+import com.exam.mapper.QuestionMapper;
 import com.exam.mapper.TeacherMapper;
 import com.exam.service.QuestionImportService;
 import com.exam.service.QuestionService;
@@ -12,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.servlet.http.HttpServletResponse;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,10 +33,15 @@ public class QuestionController {
     @Autowired
     private TeacherMapper teacherMapper;
     
+    @Autowired
+    private PaperMapper paperMapper;
+    
+    @Autowired
+    private QuestionMapper questionMapper;
+    
     /**
      * 分页查询题目列表
      */
-    @SysLog("查询题目列表")
     @GetMapping
     public Result<PageResult<Question>> getQuestionList(
             @RequestAttribute("userId") Long userId,
@@ -40,11 +49,15 @@ public class QuestionController {
             @RequestParam(required = false) Integer difficulty,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String subject,
+            @RequestParam(required = false) boolean includeAll,
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "20") int pageSize) {
         
-        // 获取教师ID（这里简化处理，实际应该根据userId查询teacher表）
-        Long teacherId = getTeacherIdByUserId(userId);
+        Long teacherId = null;
+        // 如果不包含所有题目，则按教师ID过滤
+        if (!includeAll) {
+            teacherId = getTeacherIdByUserId(userId);
+        }
         
         PageResult<Question> result = questionService.getQuestionList(
             teacherId, type, difficulty, keyword, subject, pageNum, pageSize);
@@ -129,11 +142,45 @@ public class QuestionController {
         Long teacherId = getTeacherIdByUserId(userId);
         int total = questionService.countQuestions(teacherId);
         
+        // 本月新增
+        int monthQuestions = questionMapper.countByTeacherIdAndMonth(teacherId);
+        
+        // 覆盖科目
+        int subjectCount = questionMapper.countDistinctSubjectByTeacherId(teacherId);
+        
+        // 被引用次数：遍历该教师的所有试卷，统计题目ID属于该教师的出现次数
+        int usageCount = 0;
+        List<Paper> papers = paperMapper.selectList(teacherId);
+        if (papers != null) {
+            for (Paper paper : papers) {
+                if (paper.getQuestionConfig() != null) {
+                    try {
+                        cn.hutool.json.JSONObject config = cn.hutool.json.JSONUtil.parseObj(paper.getQuestionConfig());
+                        cn.hutool.json.JSONArray questions = config.getJSONArray("questions");
+                        if (questions != null) {
+                            for (int i = 0; i < questions.size(); i++) {
+                                cn.hutool.json.JSONObject q = questions.getJSONObject(i);
+                                Long qId = q.getLong("questionId");
+                                if (qId != null) {
+                                    Question qDetail = questionMapper.selectById(qId);
+                                    if (qDetail != null && qDetail.getTeacherId().equals(teacherId)) {
+                                        usageCount++;
+                                    }
+                                }
+                            }
+                        }
+                    } catch (Exception e) {
+                        // 忽略解析错误
+                    }
+                }
+            }
+        }
+        
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalQuestions", total);
-        stats.put("monthQuestions", 0); // TODO: 实现本月新增统计
-        stats.put("subjectCount", 0);   // TODO: 实现科目数量统计
-        stats.put("usageCount", 0);     // TODO: 实现引用次数统计
+        stats.put("monthQuestions", monthQuestions);
+        stats.put("subjectCount", subjectCount);
+        stats.put("usageCount", usageCount);
         
         return Result.success(stats);
     }
@@ -159,7 +206,7 @@ public class QuestionController {
             }
             
             Long teacherId = getTeacherIdByUserId(userId);
-            int successCount = questionImportService.importQuestionsFromWord(file, teacherId, subject);
+            int successCount = questionImportService.importQuestions(file, teacherId, subject);
             
             Map<String, Object> result = new HashMap<>();
             result.put("successCount", successCount);
@@ -169,6 +216,25 @@ public class QuestionController {
         } catch (Exception e) {
             e.printStackTrace();
             return Result.error("导入失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 批量导出题目
+     */
+    @GetMapping("/batch-export")
+    public void batchExportQuestions(
+            @RequestAttribute("userId") Long userId,
+            @RequestParam(required = false) Integer type,
+            @RequestParam(required = false) Integer difficulty,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String subject,
+            HttpServletResponse response) {
+        try {
+            Long teacherId = getTeacherIdByUserId(userId);
+            questionImportService.exportQuestions(teacherId, type, difficulty, keyword, subject, response);
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
     

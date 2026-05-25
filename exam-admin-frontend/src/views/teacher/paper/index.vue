@@ -84,19 +84,61 @@
         
         <el-divider>从题库选择题</el-divider>
         <div class="question-selector">
-          <el-input 
-            v-model="questionKeyword" 
-            placeholder="搜索题目" 
-            style="margin-bottom:15px" 
-            @keyup.enter="searchQuestions"
-          >
-            <template #append>
-              <el-button @click="searchQuestions">搜索</el-button>
-            </template>
-          </el-input>
+          <div class="question-filter">
+            <el-select v-model="filterSubject" placeholder="按科目筛选" clearable @change="searchQuestions" style="width: 150px">
+              <el-option 
+                v-for="item in subjectList" 
+                :key="item.id" 
+                :label="item.name" 
+                :value="item.name"
+              />
+            </el-select>
+            <el-select v-model="filterType" placeholder="按题型筛选" clearable @change="searchQuestions" style="width: 150px">
+              <el-option label="单选题" :value="1" />
+              <el-option label="多选题" :value="2" />
+              <el-option label="判断题" :value="3" />
+              <el-option label="填空题" :value="4" />
+              <el-option label="简答题" :value="5" />
+              <el-option label="编程题" :value="6" />
+            </el-select>
+            <el-input 
+              v-model="questionKeyword" 
+              placeholder="搜索题目" 
+              style="flex: 1" 
+              @keyup.enter="searchQuestions"
+            >
+              <template #append>
+                <el-button @click="searchQuestions">搜索</el-button>
+              </template>
+            </el-input>
+          </div>
+          
+          <!-- 题型统计 -->
+          <div class="type-stats" v-if="availableQuestions.length > 0">
+            <el-tag size="small" :type="getTypeTagType(1)" style="margin: 2px">
+              单选题: {{ countByType(1) }}
+            </el-tag>
+            <el-tag size="small" :type="getTypeTagType(2)" style="margin: 2px">
+              多选题: {{ countByType(2) }}
+            </el-tag>
+            <el-tag size="small" :type="getTypeTagType(3)" style="margin: 2px">
+              判断题: {{ countByType(3) }}
+            </el-tag>
+            <el-tag size="small" :type="getTypeTagType(4)" style="margin: 2px">
+              填空题: {{ countByType(4) }}
+            </el-tag>
+            <el-tag size="small" :type="getTypeTagType(5)" style="margin: 2px">
+              简答题: {{ countByType(5) }}
+            </el-tag>
+            <el-tag size="small" :type="getTypeTagType(6)" style="margin: 2px">
+              编程题: {{ countByType(6) }}
+            </el-tag>
+          </div>
+          
           <el-table :data="availableQuestions" height="300" @selection-change="handleQuestionSelect">
             <el-table-column type="selection" width="55" />
             <el-table-column prop="content" label="题目" show-overflow-tooltip />
+            <el-table-column prop="subject" label="所属科目" width="120" />
             <el-table-column prop="type" label="题型" width="100">
               <template #default="{row}">{{getTypeText(row.type)}}</template>
             </el-table-column>
@@ -161,6 +203,10 @@
           <div class="type-config">
             <el-input-number v-model="autoForm.essayCount" :min="0" style="width: 100px" /> 简答题 
             (<el-input-number v-model="autoForm.essayScore" :min="1" controls-position="right" style="width: 80px" /> 分/题)
+          </div>
+          <div class="type-config">
+            <el-input-number v-model="autoForm.programCount" :min="0" style="width: 100px" /> 编程题 
+            (<el-input-number v-model="autoForm.programScore" :min="1" controls-position="right" style="width: 80px" /> 分/题)
           </div>
         </el-form-item>
         <el-form-item label="预计总分">
@@ -263,6 +309,8 @@ const previewLoading = ref(false)
 const previewPaper = ref({})
 const previewQuestions = ref([])
 const questionKeyword = ref('')
+const filterSubject = ref('') // 科目筛选条件
+const filterType = ref('') // 题型筛选条件
 const availableQuestions = ref([])
 const selectedQuestions = ref([])
 const subjectList = ref([]) // 科目列表
@@ -285,7 +333,8 @@ const autoForm = reactive({
   multiCount: 10, multiScore: 3,
   judgeCount: 10, judgeScore: 1,
   fillCount: 5, fillScore: 5,
-  essayCount: 2, essayScore: 10
+  essayCount: 2, essayScore: 10,
+  programCount: 0, programScore: 15
 })
 
 // 组件挂载后确保分值正确初始化
@@ -297,6 +346,7 @@ onMounted(async () => {
   autoForm.judgeScore = 1
   autoForm.fillScore = 5
   autoForm.essayScore = 10
+  autoForm.programScore = 15
 })
 
 const selectedTotalScore = computed(() => 
@@ -310,7 +360,8 @@ const calculateAutoTotal = computed(() =>
   autoForm.multiCount * autoForm.multiScore + 
   autoForm.judgeCount * autoForm.judgeScore +
   autoForm.fillCount * autoForm.fillScore +
-  autoForm.essayCount * autoForm.essayScore
+  autoForm.essayCount * autoForm.essayScore +
+  autoForm.programCount * autoForm.programScore
 )
 
 // 获取试卷列表
@@ -349,15 +400,43 @@ const fetchSubjects = async () => {
 // 搜索可用题目
 const searchQuestions = async () => {
   try {
-    const res = await getQuestionList({
-      keyword: questionKeyword.value,
-      subject: paperForm.subject || undefined, // 如果选择了科目，按科目筛选
+    // 构建查询参数
+    const params = {
       pageNum: 1,
-      pageSize: 50
-    })
+      pageSize: 200, // 增加页面大小以获取更多题目，确保包含所有题型
+      includeAll: true // 包含所有教师的题目，方便组卷
+    }
+    
+    // 只有当关键词有值时才添加
+    if (questionKeyword.value && questionKeyword.value.trim()) {
+      params.keyword = questionKeyword.value
+    }
+    
+    // 只有当筛选科目有值时才添加subject参数
+    if (filterSubject.value) {
+      params.subject = filterSubject.value
+    }
+    
+    // 只有当筛选题型有值时才添加type参数
+    if (filterType.value) {
+      params.type = filterType.value
+    }
+    
+    console.log('查询题目参数:', params)
+    const res = await getQuestionList(params)
+    console.log('返回的题目数据:', res.data)
     if (res.data) {
       // 后端PageResult返回的是records字段，不是list
       availableQuestions.value = res.data.records || []
+      console.log('可用题目数量:', availableQuestions.value.length)
+      
+      // 统计题型分布
+      const typeStats = {}
+      availableQuestions.value.forEach(q => {
+        const typeName = getTypeText(q.type)
+        typeStats[typeName] = (typeStats[typeName] || 0) + 1
+      })
+      console.log('题型分布:', typeStats)
     }
   } catch (error) {
     console.error('搜索题目失败:', error)
@@ -366,6 +445,8 @@ const searchQuestions = async () => {
 
 // 科目改变时重新搜索题目
 const handleSubjectChange = () => {
+  filterSubject.value = '' // 清空筛选科目
+  filterType.value = '' // 清空筛选题型
   selectedQuestions.value = [] // 清空已选题目
   searchQuestions()
 }
@@ -476,6 +557,8 @@ const resetPaperForm = () => {
   paperForm.subject = ''
   paperForm.duration = 120
   paperForm.description = ''
+  filterSubject.value = '' // 清空筛选科目
+  filterType.value = '' // 清空筛选题型
   selectedQuestions.value = []
 }
 
@@ -554,7 +637,9 @@ const autoCompose = async () => {
         fillCount: autoForm.fillCount,
         fillScore: autoForm.fillScore,
         essayCount: autoForm.essayCount,
-        essayScore: autoForm.essayScore
+        essayScore: autoForm.essayScore,
+        programCount: autoForm.programCount,
+        programScore: autoForm.programScore
       }
     }
     
@@ -574,8 +659,13 @@ const getDifficultyTagType = (d) => ({1:'success',2:'warning',3:'danger'}[d]||''
 const getDifficultyText = (d) => ({1:'简单',2:'中等',3:'困难'}[d]||'')
 const getStatusTagType = (s) => ({unpublished:'info',published:'success',ended:'warning'}[s]||'')
 const getStatusText = (s) => ({unpublished:'未发布',published:'已发布',ended:'已结束'}[s]||'')
-const getTypeText = (t) => ({1:'单选题',2:'多选题',3:'判断题',4:'填空题',5:'简答题'}[t]||'')
-const getTypeTagType = (t) => ({1:'',2:'warning',3:'success',4:'info',5:'danger'}[t]||'')
+const getTypeText = (t) => ({1:'单选题',2:'多选题',3:'判断题',4:'填空题',5:'简答题',6:'编程题'}[t]||'')
+const getTypeTagType = (t) => ({1:'',2:'warning',3:'success',4:'info',5:'danger',6:'primary'}[t]||'')
+
+// 统计指定题型的数量
+const countByType = (type) => {
+  return availableQuestions.value.filter(q => q.type === type).length
+}
 
 onMounted(() => {
   fetchPapers()
@@ -590,6 +680,8 @@ onMounted(() => {
 .action-bar { display: flex; gap: 10px; }
 .pagination { margin-top: 20px; display: flex; justify-content: flex-end; }
 .question-selector { margin: 15px 0; }
+.question-filter { display: flex; margin-bottom: 15px; gap: 10px; }
+.type-stats { margin-bottom: 15px; padding: 8px; background: #f5f7fa; border-radius: 6px; }
 .selected-summary { margin-top: 15px; font-weight: bold; color: #409eff; }
 .type-config { margin-bottom: 10px; }
 
