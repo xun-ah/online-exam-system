@@ -267,6 +267,15 @@ export function forceSubmitExam(examId, studentId) {
   })
 }
 
+// 打回考试记录（让学生重做）
+export function rollbackExamRecord(recordId, reason) {
+  return request({
+    url: `/teacher/grading/${recordId}/rollback`,
+    method: 'post',
+    data: { reason }
+  })
+}
+
 // 获取我的班级列表
 export function getMyClasses() {
   return request({
@@ -338,5 +347,34 @@ export function getAllSubjects() {
   return request({
     url: '/subject/all',
     method: 'get'
+  })
+}
+
+// ==================== 成绩分析 ====================
+
+// 班级间成绩对比
+export function getClassComparison(examId) {
+  return request({
+    url: '/teacher/score-analysis/class-comparison',
+    method: 'get',
+    params: { examId }
+  })
+}
+
+// 知识点掌握度分析
+export function getKnowledgeAnalysis(examId) {
+  return request({
+    url: '/teacher/score-analysis/knowledge-analysis',
+    method: 'get',
+    params: { examId }
+  })
+}
+
+// 试题质量分析
+export function getQuestionQuality(examId) {
+  return request({
+    url: '/teacher/score-analysis/question-quality',
+    method: 'get',
+    params: { examId }
   })
 }

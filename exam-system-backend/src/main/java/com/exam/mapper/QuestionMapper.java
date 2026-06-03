@@ -4,6 +4,7 @@ import com.exam.entity.Question;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface QuestionMapper {
@@ -50,4 +51,14 @@ public interface QuestionMapper {
      * 统计覆盖科目数
      */
     int countDistinctSubjectByTeacherId(@Param("teacherId") Long teacherId);
+    
+    /**
+     * 统计各题型数量
+     */
+    List<Map<String, Object>> countByType();
+    
+    /**
+     * 统计月度考试趋势
+     */
+    List<Map<String, Object>> countMonthlyTrend();
 }

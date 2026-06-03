@@ -90,6 +90,10 @@
             <el-icon><Document /></el-icon>
             <template #title>系统日志</template>
           </el-menu-item>
+          <el-menu-item index="/admin/statistics">
+            <el-icon><TrendCharts /></el-icon>
+            <template #title>数据统计</template>
+          </el-menu-item>
         </el-menu>
       </div>
 

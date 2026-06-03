@@ -51,7 +51,92 @@ spring:
 mvn spring-boot:run
 ```
 
-项目将在 http://localhost:8080/api 启动
+项目将在 http://localhost:8088/api 启动
+
+## 常用运维命令
+
+### 启动后端服务
+```bash
+cd exam-system-backend
+mvn spring-boot:run
+```
+
+### 终止后端服务（Windows）
+
+**方法1：查找并终止占用8088端口的进程**
+```powershell
+# 1. 查找占用8088端口的进程PID
+netstat -ano | findstr :8088
+
+# 2. 终止进程（将<PID>替换为实际进程号）
+taskkill /F /PID <PID>
+```
+
+**方法2：直接终止Java进程**
+```powershell
+# 查找所有Java进程
+tasklist | findstr java
+
+# 终止指定PID的Java进程
+taskkill /F /PID <PID>
+```
+
+### 端口占用检查与处理
+
+**检查端口是否被占用**
+```powershell
+netstat -ano | findstr :8088
+```
+
+输出示例：
+```
+TCP    0.0.0.0:8088           0.0.0.0:0              LISTENING       12345
+TCP    [::]:8088              [::]:0                 LISTENING       12345
+```
+最后一列 `12345` 即为占用端口的进程PID。
+
+**强制终止占用端口的进程**
+```powershell
+taskkill /F /PID 12345
+```
+
+**一次性检查并终止（推荐）**
+```powershell
+# 如果端口被占用，自动终止
+for /f "tokens=5" %a in ('netstat -ano ^| findstr :8088') do @taskkill /F /PID %a
+```
+
+### 重新编译并启动
+```bash
+# 清理并重新编译
+mvn clean compile -DskipTests
+
+# 启动服务
+mvn spring-boot:run
+```
+
+### 常见问题
+
+**问题1：端口8088已被占用**
+```
+错误信息：Port 8088 was already in use
+解决方法：按照上述端口检查步骤，找到并终止占用进程
+```
+
+**问题2：代码修改后未生效**
+```bash
+# 需要清除IDEA缓存并重新编译
+mvn clean compile -DskipTests
+mvn spring-boot:run
+```
+
+**问题3：前端缓存问题**
+```bash
+# 清除浏览器缓存或使用 Ctrl+F5 强制刷新
+# 或重启前端开发服务器
+cd exam-admin-frontend
+npm run dev
+```
 
 ## API接口
 

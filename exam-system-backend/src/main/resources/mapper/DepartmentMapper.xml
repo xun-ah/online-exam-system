@@ -52,4 +52,18 @@
         DELETE FROM department WHERE id = #{id}
     </delete>
     
+    <!-- 统计各院系考试参与人次 -->
+    <select id="countExamParticipationByDepartment" resultType="java.util.HashMap">
+        SELECT 
+            d.dept_name as name,
+            COUNT(er.id) as count
+        FROM department d
+        LEFT JOIN class_info c ON d.id = c.department_id
+        LEFT JOIN student s ON c.id = s.class_id
+        LEFT JOIN exam_record er ON s.id = er.student_id AND er.status >= 1
+        WHERE d.deleted = 0
+        GROUP BY d.id, d.dept_name
+        ORDER BY count DESC
+    </select>
+    
 </mapper>

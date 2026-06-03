@@ -163,7 +163,7 @@ const fetchQuestionTypeStats = async () => {
         series: [{
           data: data.map(item => ({
             name: item.name,
-            value: item.percentage
+            value: item.count
           }))
         }]
       })

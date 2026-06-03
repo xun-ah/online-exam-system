@@ -28,6 +28,8 @@ public class Exam {
     
     private Integer shuffleEnabled; // 是否启用乱序 0-否 1-是
     
+    private Integer maxSwitchCount; // 最大允许切屏次数（默认3次）
+    
     private LocalDateTime createTime;
     
     private LocalDateTime updateTime;

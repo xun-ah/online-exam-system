@@ -41,6 +41,8 @@ public class StudentExamController {
     @GetMapping("/{examId}")
     public Result<Map<String, Object>> getExamDetail(@PathVariable Long examId,
                                                      @RequestAttribute("userId") Long userId) {
+        System.out.println("[学生考试-开始] 获取考试详情 - 考试ID: " + examId + ", 用户ID: " + userId);
+        
         // 获取考试信息
         Exam exam = examMapper.selectById(examId);
         if (exam == null) {
@@ -55,12 +57,14 @@ public class StudentExamController {
         
         // 检查是否已经提交过考试
         List<ExamRecord> existingRecords = examRecordMapper.selectList(examId, student.getId());
+        ExamRecord currentRecord = null;
         if (existingRecords != null && !existingRecords.isEmpty()) {
             ExamRecord existingRecord = existingRecords.get(0);
             // 如果状态是2（已提交），则不允许再次考试
             if (existingRecord.getStatus() != null && existingRecord.getStatus() == 2) {
                 return Result.error("您已经参加过该考试");
             }
+            currentRecord = existingRecord;
         }
         
         // 获取试卷信息
@@ -82,8 +86,38 @@ public class StudentExamController {
         }
         
         // 获取题目列表（根据考试设置决定是否乱序）
-        List<Map<String, Object>> questions = studentExamService.getExamQuestions(paper.getQuestionConfig(), exam.getShuffleEnabled());
+        Integer shuffleFlag = exam.getShuffleEnabled();
+        if (shuffleFlag == null) {
+            shuffleFlag = 0; // 默认不启用乱序
+        }
+        System.out.println("[学生考试] 考试ID: " + examId + ", 启用乱序: " + (shuffleFlag == 1 ? "是" : "否"));
+        
+        // 检查是否有已保存的题目顺序
+        String savedQuestionOrder = null;
+        if (currentRecord != null) {
+            savedQuestionOrder = currentRecord.getQuestionOrder();
+            if (savedQuestionOrder != null && !savedQuestionOrder.isEmpty()) {
+                System.out.println("[学生考试] 找到已保存的题目顺序");
+            }
+        }
+        
+        // 使用 getExamQuestionsWithOrder 方法处理题目顺序
+        Map<String, Object> questionsResult = studentExamService.getExamQuestionsWithOrder(
+            paper.getQuestionConfig(), 
+            shuffleFlag, 
+            savedQuestionOrder
+        );
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> questions = (List<Map<String, Object>>) questionsResult.get("questions");
+        System.out.println("[学生考试] 返回题目数量: " + questions.size());
         result.put("questions", questions);
+        
+        // 返回最大切屏次数配置
+        if (exam.getMaxSwitchCount() != null) {
+            result.put("maxSwitchCount", exam.getMaxSwitchCount());
+        } else {
+            result.put("maxSwitchCount", 3); // 默认3次
+        }
         
         return Result.success(result);
     }
@@ -100,37 +134,71 @@ public class StudentExamController {
             return Result.error("学生信息不存在");
         }
         
+        // 获取考试信息（用于生成题目顺序）
+        Exam exam = examMapper.selectById(examId);
+        if (exam == null) {
+            return Result.error("考试不存在");
+        }
+        
+        // 获取试卷信息
+        Paper paper = paperMapper.selectById(exam.getPaperId());
+        if (paper == null) {
+            return Result.error("试卷不存在");
+        }
+        
         // 检查是否已经参加过考试
         List<ExamRecord> existingRecords = examRecordMapper.selectList(examId, student.getId());
         if (existingRecords != null && !existingRecords.isEmpty()) {
             ExamRecord existingRecord = existingRecords.get(0);
-            // 如果状态是2（已提交），则不允许再次考试
+            // 如果状态是2（已阅卷），则不允许再次考试
             if (existingRecord.getStatus() != null && existingRecord.getStatus() == 2) {
                 return Result.error("您已经参加过该考试");
             }
-            // 如果状态是1（考试中），则返回已有的记录ID
+            // 如果状态是1（已提交待阅卷），则不允许再次考试
             if (existingRecord.getStatus() != null && existingRecord.getStatus() == 1) {
+                return Result.error("您已经提交过该考试");
+            }
+            // 如果状态是0（考试中/被打回），则返回已有的记录ID，让学生继续作答
+            if (existingRecord.getStatus() != null && existingRecord.getStatus() == 0) {
                 Map<String, Object> data = new HashMap<>();
                 data.put("recordId", existingRecord.getId());
                 // 返回ISO格式的本地时间字符串
                 data.put("startTime", existingRecord.getCreateTime().toString());
                 data.put("alreadyStarted", true);
+                // 返回当前切屏次数（打回后已清零）
+                data.put("switchCount", existingRecord.getSwitchCount() != null ? existingRecord.getSwitchCount() : 0);
                 return Result.success(data);
             }
+        }
+        
+        // 生成题目顺序（如果启用乱序）
+        String questionOrder = null;
+        if (exam.getShuffleEnabled() != null && exam.getShuffleEnabled() == 1) {
+            // 使用 Service 生成题目顺序
+            Map<String, Object> tempResult = studentExamService.getExamQuestionsWithOrder(
+                paper.getQuestionConfig(), 
+                exam.getShuffleEnabled(), 
+                null
+            );
+            questionOrder = (String) tempResult.get("questionOrder");
+            System.out.println("[开始考试] 生成的题目顺序: " + questionOrder);
         }
         
         // 创建考试记录
         ExamRecord record = new ExamRecord();
         record.setExamId(examId);
         record.setStudentId(student.getId());
-        record.setStatus(1); // 1-考试中
+        record.setStatus(0); // 0-考试中
         record.setCreateTime(LocalDateTime.now());
+        record.setQuestionOrder(questionOrder); // 保存题目顺序
         examRecordMapper.insert(record);
         
         Map<String, Object> data = new HashMap<>();
         data.put("recordId", record.getId());
         // 返回ISO格式的本地时间字符串，前端可以直接解析
         data.put("startTime", record.getCreateTime().toString());
+        // 返回当前切屏次数（首次进入为0）
+        data.put("switchCount", 0);
         
         return Result.success(data);
     }
@@ -188,6 +256,11 @@ public class StudentExamController {
         }
         
         ExamRecord record = records.get(0);
+        
+        // 同步切屏次数（从前端传入）
+        if (params.get("switchCount") != null) {
+            record.setSwitchCount(((Number) params.get("switchCount")).intValue());
+        }
         
         // 获取答案
         @SuppressWarnings("unchecked")

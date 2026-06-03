@@ -235,6 +235,14 @@ public class QuestionController {
             questionImportService.exportQuestions(teacherId, type, difficulty, keyword, subject, response);
         } catch (Exception e) {
             e.printStackTrace();
+            // 返回错误信息
+            response.setStatus(500);
+            response.setContentType("application/json;charset=UTF-8");
+            try {
+                response.getWriter().write("{\"code\":500,\"message\":\"导出失败: " + e.getMessage() + "\"}");
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
         }
     }
     

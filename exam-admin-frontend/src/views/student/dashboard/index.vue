@@ -74,6 +74,17 @@
               </div>
             </div>
           </div>
+          <!-- 分页 -->
+          <div class="pagination-wrapper" style="display: flex; justify-content: center; width: 100%;">
+            <el-pagination
+              v-model:current-page="pendingPage"
+              :page-size="pendingPageSize"
+              :total="pendingTotal"
+              layout="prev, pager, next"
+              @current-change="handlePendingPageChange"
+              style="justify-content: center;"
+            />
+          </div>
         </div>
 
         <!-- 最近考试 -->
@@ -89,6 +100,17 @@
                 {{ record.score }}分
               </span>
             </div>
+          </div>
+          <!-- 分页 -->
+          <div class="pagination-wrapper" style="display: flex; justify-content: center; width: 100%;">
+            <el-pagination
+              v-model:current-page="recentPage"
+              :page-size="recentPageSize"
+              :total="recentTotal"
+              layout="prev, pager, next"
+              @current-change="handleRecentPageChange"
+              style="justify-content: center;"
+            />
           </div>
         </div>
       </div>
@@ -142,9 +164,15 @@ const stats = reactive({
 
 // 待考考试
 const pendingExams = ref([])
+const pendingPage = ref(1)
+const pendingPageSize = ref(2)
+const pendingTotal = ref(0)
 
 // 最近考试
 const recentExams = ref([])
+const recentPage = ref(1)
+const recentPageSize = ref(2)
+const recentTotal = ref(0)
 
 // 成绩趋势数据
 const scoreTrend = ref([])
@@ -329,8 +357,22 @@ const loadStats = async () => {
 // 加载待考考试
 const loadPendingExams = async () => {
   try {
-    const res = await request.get('/student/exams/pending')
-    pendingExams.value = res.data || []
+    const res = await request.get('/student/exams/pending', {
+      params: {
+        pageNum: pendingPage.value,
+        pageSize: pendingPageSize.value
+      }
+    })
+    if (res.data) {
+      // 支持分页数据格式
+      if (res.data.records) {
+        pendingExams.value = res.data.records
+        pendingTotal.value = res.data.total || 0
+      } else if (Array.isArray(res.data)) {
+        pendingExams.value = res.data
+        pendingTotal.value = res.data.length
+      }
+    }
   } catch (error) {
     console.error('加载待考考试失败:', error)
   }
@@ -339,8 +381,22 @@ const loadPendingExams = async () => {
 // 加载最近考试
 const loadRecentExams = async () => {
   try {
-    const res = await request.get('/student/exams/recent')
-    recentExams.value = res.data || []
+    const res = await request.get('/student/exams/recent', {
+      params: {
+        pageNum: recentPage.value,
+        pageSize: recentPageSize.value
+      }
+    })
+    if (res.data) {
+      // 支持分页数据格式
+      if (res.data.records) {
+        recentExams.value = res.data.records
+        recentTotal.value = res.data.total || 0
+      } else if (Array.isArray(res.data)) {
+        recentExams.value = res.data
+        recentTotal.value = res.data.length
+      }
+    }
   } catch (error) {
     console.error('加载最近考试失败:', error)
   }
@@ -355,6 +411,18 @@ const loadScoreTrend = async () => {
   } catch (error) {
     console.error('加载成绩趋势失败:', error)
   }
+}
+
+// 待考考试分页切换
+const handlePendingPageChange = (page) => {
+  pendingPage.value = page
+  loadPendingExams()
+}
+
+// 最近考试分页切换
+const handleRecentPageChange = (page) => {
+  recentPage.value = page
+  loadRecentExams()
 }
 
 onMounted(() => {
@@ -485,6 +553,8 @@ onMounted(() => {
   border-radius: 8px;
   padding: 20px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
 
   .section-title {
     margin: 0 0 16px 0;
@@ -495,6 +565,11 @@ onMounted(() => {
 }
 
 .exam-list {
+  flex: 1;
+  min-height: 220px; // 固定高度，显示2个考试
+  display: flex;
+  flex-direction: column;
+  
   .exam-item {
     display: flex;
     justify-content: space-between;
@@ -538,6 +613,21 @@ onMounted(() => {
       margin-left: 16px;
     }
   }
+
+  .pagination-wrapper {
+    margin-top: auto;
+    padding-top: 16px;
+    border-top: 1px solid #f0f0f0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+  }
+
+  .pagination-wrapper :deep(.el-pagination) {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 .chart-container {
@@ -550,13 +640,14 @@ onMounted(() => {
 }
 
 .recent-exam-list {
-  min-height: 200px;
+  min-height: 120px;
+  max-height: 160px;
   
   .recent-exam-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 0;
+    padding: 10px 0;
     border-bottom: 1px solid #f0f0f0;
 
     &:last-child {

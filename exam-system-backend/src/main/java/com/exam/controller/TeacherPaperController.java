@@ -48,7 +48,7 @@ public class TeacherPaperController {
     }
 
     /**
-     * 获取试卷题目列表（用于预览）
+     * 获取试卷题目列表（用于预览）- 按原始顺序
      */
     @GetMapping("/{id}/questions")
     public Result<List<Map<String, Object>>> getPaperQuestions(@PathVariable Long id) {

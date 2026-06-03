@@ -158,4 +158,35 @@
         AND subject IS NOT NULL AND subject != ''
     </select>
     
+    <!-- 统计各题型数量 -->
+    <select id="countByType" resultType="java.util.HashMap">
+        SELECT 
+            CASE type
+                WHEN 1 THEN '单选题'
+                WHEN 2 THEN '多选题'
+                WHEN 3 THEN '判断题'
+                WHEN 4 THEN '填空题'
+                WHEN 5 THEN '简答题'
+                WHEN 6 THEN '编程题'
+                ELSE '其他'
+            END as name,
+            COUNT(*) as count
+        FROM question
+        WHERE deleted = 0
+        GROUP BY type
+        ORDER BY count DESC
+    </select>
+    
+    <!-- 统计月度考试趋势 -->
+    <select id="countMonthlyTrend" resultType="java.util.HashMap">
+        SELECT 
+            DATE_FORMAT(create_time, '%Y-%m') as month,
+            COUNT(*) as count
+        FROM exam
+        WHERE deleted = 0
+        AND create_time >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+        GROUP BY DATE_FORMAT(create_time, '%Y-%m')
+        ORDER BY month ASC
+    </select>
+    
 </mapper>

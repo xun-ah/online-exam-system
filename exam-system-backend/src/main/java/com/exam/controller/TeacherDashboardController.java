@@ -8,6 +8,7 @@ import com.exam.entity.Paper;
 import com.exam.entity.Question;
 import com.exam.entity.Teacher;
 import com.exam.mapper.*;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @RestController
 @RequestMapping("/teacher/dashboard")
 public class TeacherDashboardController {
@@ -117,87 +119,96 @@ public class TeacherDashboardController {
     public Result<List<Map<String, Object>>> getTodos(@RequestAttribute("userId") Long userId) {
         List<Map<String, Object>> todos = new ArrayList<>();
         
-        // 获取教师信息（通过userId查询）
-        Teacher teacher = teacherMapper.selectByUserId(userId);
-        if (teacher == null) {
+        try {
+            // 获取教师信息（通过userId查询）
+            Teacher teacher = teacherMapper.selectByUserId(userId);
+            if (teacher == null) {
+                return Result.success(todos);
+            }
+            
+            Long teacherId = teacher.getId();
+            
+            // 1. 待阅卷任务
+            List<Exam> exams = examMapper.selectList(teacherId, null, null);
+            if (exams != null && !exams.isEmpty()) {
+                for (Exam exam : exams) {
+                    List<ExamRecord> records = examRecordMapper.selectList(exam.getId(), null);
+                    long pendingCount = records != null ? records.stream()
+                        .filter(r -> r.getStatus() != null && r.getStatus() == 1)
+                        .count() : 0;
+                    
+                    if (pendingCount > 0) {
+                        Map<String, Object> todo = new HashMap<>();
+                        todo.put("id", exam.getId() + "_grading");
+                        todo.put("title", "《" + exam.getExamName() + "》阅卷");
+                        todo.put("description", "待阅卷 " + pendingCount + " 份");
+                        todo.put("type", "grading");
+                        todo.put("priority", pendingCount > 20 ? "urgent" : "normal");
+                        todo.put("createTime", exam.getCreateTime());
+                        todos.add(todo);
+                    }
+                }
+            }
+            
+            // 2. 进行中的考试监控
+            if (exams != null && !exams.isEmpty()) {
+                for (Exam exam : exams) {
+                    if (exam.getStatus() != null && exam.getStatus() == 1) {
+                        Map<String, Object> todo = new HashMap<>();
+                        todo.put("id", exam.getId() + "_monitor");
+                        todo.put("title", "《" + exam.getExamName() + "》考试监控");
+                        
+                        // 计算剩余时间
+                        LocalDateTime now = LocalDateTime.now();
+                        LocalDateTime endTime = exam.getEndTime();
+                        if (endTime != null && endTime.isAfter(now)) {
+                            long minutes = java.time.Duration.between(now, endTime).toMinutes();
+                            todo.put("description", "进行中，剩余 " + minutes + " 分钟");
+                        } else {
+                            todo.put("description", "进行中");
+                        }
+                        
+                        todo.put("type", "monitoring");
+                        todo.put("priority", "warning");
+                        todo.put("createTime", exam.getStartTime());
+                        todos.add(todo);
+                    }
+                }
+            }
+            
+            // 3. 待审核试卷
+            List<Paper> papers = paperMapper.selectList(teacherId);
+            long pendingPaperCount = papers != null ? papers.stream()
+                .filter(p -> p.getStatus() != null && p.getStatus().equals("unpublished"))
+                .count() : 0;
+            
+            if (pendingPaperCount > 0) {
+                Map<String, Object> todo = new HashMap<>();
+                todo.put("id", "paper_review");
+                todo.put("title", "试卷审核");
+                todo.put("description", "需审核 " + pendingPaperCount + " 套试卷");
+                todo.put("type", "review");
+                todo.put("priority", "normal");
+                todo.put("createTime", LocalDateTime.now());
+                todos.add(todo);
+            }
+            
+            // 按创建时间排序
+            todos.sort((a, b) -> {
+                LocalDateTime timeA = (LocalDateTime) a.get("createTime");
+                LocalDateTime timeB = (LocalDateTime) b.get("createTime");
+                if (timeA == null && timeB == null) return 0;
+                if (timeA == null) return 1;
+                if (timeB == null) return -1;
+                return timeB.compareTo(timeA);
+            });
+            
+            // 只返回前5个
+            return Result.success(todos.stream().limit(5).collect(Collectors.toList()));
+        } catch (Exception e) {
+            log.error("获取待办事项失败", e);
             return Result.success(todos);
         }
-        
-        Long teacherId = teacher.getId();
-        
-        // 1. 待阅卷任务
-        List<Exam> exams = examMapper.selectList(teacherId, null, null);
-        for (Exam exam : exams) {
-            List<ExamRecord> records = examRecordMapper.selectList(exam.getId(), null);
-            long pendingCount = records.stream()
-                .filter(r -> r.getStatus() != null && r.getStatus() == 1)
-                .count();
-            
-            if (pendingCount > 0) {
-                Map<String, Object> todo = new HashMap<>();
-                todo.put("id", exam.getId() + "_grading");
-                todo.put("title", "《" + exam.getExamName() + "》阅卷");
-                todo.put("description", "待阅卷 " + pendingCount + " 份");
-                todo.put("type", "grading");
-                todo.put("priority", pendingCount > 20 ? "urgent" : "normal");
-                todo.put("createTime", exam.getCreateTime());
-                todos.add(todo);
-            }
-        }
-        
-        // 2. 进行中的考试监控
-        for (Exam exam : exams) {
-            if (exam.getStatus() != null && exam.getStatus() == 1) {
-                Map<String, Object> todo = new HashMap<>();
-                todo.put("id", exam.getId() + "_monitor");
-                todo.put("title", "《" + exam.getExamName() + "》考试监控");
-                
-                // 计算剩余时间
-                LocalDateTime now = LocalDateTime.now();
-                LocalDateTime endTime = exam.getEndTime();
-                if (endTime != null && endTime.isAfter(now)) {
-                    long minutes = java.time.Duration.between(now, endTime).toMinutes();
-                    todo.put("description", "进行中，剩余 " + minutes + " 分钟");
-                } else {
-                    todo.put("description", "进行中");
-                }
-                
-                todo.put("type", "monitoring");
-                todo.put("priority", "warning");
-                todo.put("createTime", exam.getStartTime());
-                todos.add(todo);
-            }
-        }
-        
-        // 3. 待审核试卷
-        List<Paper> papers = paperMapper.selectList(teacherId);
-        long pendingPaperCount = papers.stream()
-            .filter(p -> p.getStatus() != null && p.getStatus().equals("unpublished"))
-            .count();
-        
-        if (pendingPaperCount > 0) {
-            Map<String, Object> todo = new HashMap<>();
-            todo.put("id", "paper_review");
-            todo.put("title", "试卷审核");
-            todo.put("description", "需审核 " + pendingPaperCount + " 套试卷");
-            todo.put("type", "review");
-            todo.put("priority", "normal");
-            todo.put("createTime", LocalDateTime.now());
-            todos.add(todo);
-        }
-        
-        // 按创建时间排序
-        todos.sort((a, b) -> {
-            LocalDateTime timeA = (LocalDateTime) a.get("createTime");
-            LocalDateTime timeB = (LocalDateTime) b.get("createTime");
-            if (timeA == null && timeB == null) return 0;
-            if (timeA == null) return 1;
-            if (timeB == null) return -1;
-            return timeB.compareTo(timeA);
-        });
-        
-        // 只返回前5个
-        return Result.success(todos.stream().limit(5).collect(Collectors.toList()));
     }
     
     /**
@@ -208,37 +219,45 @@ public class TeacherDashboardController {
     public Result<List<Map<String, Object>>> getRecentExams(@RequestAttribute("userId") Long userId) {
         List<Map<String, Object>> examList = new ArrayList<>();
         
-        // 获取教师信息（通过userId查询）
-        Teacher teacher = teacherMapper.selectByUserId(userId);
-        if (teacher == null) {
-            return Result.success(examList);
-        }
-        
-        Long teacherId = teacher.getId();
-        
-        // 获取该教师的所有考试
-        List<Exam> exams = examMapper.selectList(teacherId, null, null);
-        
-        // 按开始时间降序排序，取前5个
-        exams.sort((a, b) -> {
-            if (a.getStartTime() == null && b.getStartTime() == null) return 0;
-            if (a.getStartTime() == null) return 1;
-            if (b.getStartTime() == null) return -1;
-            return b.getStartTime().compareTo(a.getStartTime());
-        });
-        
-        for (Exam exam : exams.stream().limit(5).collect(Collectors.toList())) {
-            Map<String, Object> examData = new HashMap<>();
-            examData.put("id", exam.getId());
-            examData.put("examName", exam.getExamName());
-            examData.put("startTime", exam.getStartTime());
-            examData.put("status", exam.getStatus());
+        try {
+            // 获取教师信息（通过userId查询）
+            Teacher teacher = teacherMapper.selectByUserId(userId);
+            if (teacher == null) {
+                return Result.success(examList);
+            }
             
-            // 统计参考人数
-            List<ExamRecord> records = examRecordMapper.selectList(exam.getId(), null);
-            examData.put("participantCount", records.size());
+            Long teacherId = teacher.getId();
             
-            examList.add(examData);
+            // 获取该教师的所有考试
+            List<Exam> exams = examMapper.selectList(teacherId, null, null);
+            
+            if (exams == null || exams.isEmpty()) {
+                return Result.success(examList);
+            }
+            
+            // 按开始时间降序排序，取前5个
+            exams.sort((a, b) -> {
+                if (a.getStartTime() == null && b.getStartTime() == null) return 0;
+                if (a.getStartTime() == null) return 1;
+                if (b.getStartTime() == null) return -1;
+                return b.getStartTime().compareTo(a.getStartTime());
+            });
+            
+            for (Exam exam : exams.stream().limit(5).collect(Collectors.toList())) {
+                Map<String, Object> examData = new HashMap<>();
+                examData.put("id", exam.getId());
+                examData.put("examName", exam.getExamName());
+                examData.put("startTime", exam.getStartTime());
+                examData.put("status", exam.getStatus() != null ? exam.getStatus() : 0);
+                
+                // 统计参考人数
+                List<ExamRecord> records = examRecordMapper.selectList(exam.getId(), null);
+                examData.put("participantCount", records != null ? records.size() : 0);
+                
+                examList.add(examData);
+            }
+        } catch (Exception e) {
+            log.error("获取近期考试失败", e);
         }
         
         return Result.success(examList);

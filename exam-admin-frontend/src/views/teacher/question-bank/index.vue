@@ -846,8 +846,39 @@ const handleExport = async () => {
 // 导出提交
 const handleExportSubmit = async () => {
   try {
-    // 构建导出参数
+    // 构建查询参数
     const params = {
+      pageNum: 1,
+      pageSize: 1,
+      type: exportType.value,
+      difficulty: exportDifficulty.value,
+      keyword: exportKeyword.value,
+      subject: exportSubject.value
+    }
+    
+    // 先查询符合条件的题目数量
+    const countRes = await getQuestionList(params)
+    const totalCount = countRes.data?.total || 0
+    
+    // 如果没有符合条件的题目，友好提示用户
+    if (totalCount === 0) {
+      let conditionDesc = '所选筛选条件'
+      const conditions = []
+      if (exportSubject.value) conditions.push(`科目：${exportSubject.value}`)
+      if (exportType.value) conditions.push(`题型：${getTypeText(exportType.value)}`)
+      if (exportDifficulty.value) conditions.push(`难度：${getDifficultyText(exportDifficulty.value)}`)
+      if (exportKeyword.value) conditions.push(`关键词：${exportKeyword.value}`)
+      
+      if (conditions.length > 0) {
+        conditionDesc = conditions.join('、')
+      }
+      
+      ElMessage.warning(`${conditionDesc} 没有匹配的题目，请调整筛选条件后再导出`)
+      return
+    }
+    
+    // 构建导出参数
+    const exportParams = {
       type: exportType.value,
       difficulty: exportDifficulty.value,
       keyword: exportKeyword.value,
@@ -855,7 +886,15 @@ const handleExportSubmit = async () => {
     }
     
     // 调用导出API
-    const res = await exportQuestions(params)
+    const res = await exportQuestions(exportParams)
+    
+    // 检查是否是错误响应（blob可能是JSON错误信息）
+    if (res.type === 'application/json') {
+      const text = await res.text()
+      const errorData = JSON.parse(text)
+      ElMessage.error(errorData.message || '导出失败')
+      return
+    }
     
     // 处理blob响应，创建下载链接
     const blob = new Blob([res], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })

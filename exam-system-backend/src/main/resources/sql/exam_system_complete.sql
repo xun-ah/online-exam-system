@@ -1,3 +1,9 @@
+-- ====================================
+-- 在线考试系统 - 完整数据库初始化脚本
+-- 版本: 2026-05-27
+-- 说明: 包含所有表结构、初始数据和字段修正
+-- ====================================
+
 -- 创建数据库
 CREATE DATABASE IF NOT EXISTS exam_system DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -85,11 +91,11 @@ CREATE TABLE `teacher` (
   UNIQUE KEY `uk_teacher_no` (`teacher_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='教师表';
 
--- 题库表
+-- 题库表（包含编程题字段）
 CREATE TABLE `question` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '题目ID',
   `question_no` VARCHAR(50) NOT NULL COMMENT '题目编号',
-  `type` INT NOT NULL COMMENT '类型：1-单选题 2-多选题 3-判断题 4-填空题 5-简答题',
+  `type` INT NOT NULL COMMENT '类型：1-单选题 2-多选题 3-判断题 4-填空题 5-简答题 6-编程题',
   `content` TEXT NOT NULL COMMENT '题目内容',
   `options` TEXT COMMENT '选项（JSON格式）',
   `answer` TEXT NOT NULL COMMENT '正确答案',
@@ -99,6 +105,13 @@ CREATE TABLE `question` (
   `subject` VARCHAR(50) COMMENT '所属科目',
   `knowledge_point` VARCHAR(200) COMMENT '知识点',
   `difficulty` INT DEFAULT 2 COMMENT '难度：1-简单 2-中等 3-困难',
+  -- 编程题相关字段
+  `language` VARCHAR(20) COMMENT '编程语言（编程题专用）：Java、Python、C++ 等',
+  `code_template` TEXT COMMENT '代码模板（编程题专用）：学生初始代码框架',
+  `test_cases` TEXT COMMENT '测试用例（编程题专用）：JSON格式，用于自动判题',
+  `time_limit` INT DEFAULT 1000 COMMENT '时间限制（编程题专用）：单位毫秒，默认1000ms',
+  `memory_limit` INT DEFAULT 256 COMMENT '内存限制（编程题专用）：单位MB，默认256MB',
+  -- 公共字段
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `deleted` INT DEFAULT 0 COMMENT '逻辑删除',
@@ -169,13 +182,14 @@ CREATE TABLE `exam` (
   `duration` INT COMMENT '考试时长（分钟）',
   `class_id` BIGINT COMMENT '考试班级ID',
   `status` INT DEFAULT 0 COMMENT '状态：0-未开始 1-进行中 2-已结束',
+  `shuffle_enabled` INT DEFAULT 0 COMMENT '是否启用乱序：0-否 1-是',
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `deleted` INT DEFAULT 0 COMMENT '逻辑删除',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='考试表';
 
--- 考试记录表
+-- 考试记录表（包含延长考试时间字段）
 CREATE TABLE `exam_record` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '记录ID',
   `exam_id` BIGINT NOT NULL COMMENT '考试ID',
@@ -185,6 +199,7 @@ CREATE TABLE `exam_record` (
   `submit_time` DATETIME COMMENT '提交时间',
   `status` INT DEFAULT 0 COMMENT '状态：0-考试中 1-已提交 2-已阅卷',
   `extra_minutes` INT DEFAULT 0 COMMENT '延长考试时间（分钟）',
+  `switch_count` INT DEFAULT 0 COMMENT '切屏次数',
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
@@ -232,17 +247,17 @@ CREATE TABLE `system_log` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统日志表';
 
--- 插入初始数据
+-- ==================== 初始数据插入 ====================
 
--- 管理员用户
+-- 管理员用户（密码: admin123）
 INSERT INTO `sys_user` (`username`, `password`, `real_name`, `role`, `phone`, `email`, `status`) 
 VALUES ('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', '系统管理员', 1, '13800138000', 'admin@exam.com', 1);
 
--- 测试教师用户
+-- 测试教师用户（密码: admin123）
 INSERT INTO `sys_user` (`username`, `password`, `real_name`, `role`, `phone`, `email`, `status`) 
 VALUES ('teacher1', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', '张老师', 2, '13800138001', 'teacher1@exam.com', 1);
 
--- 测试学生用户
+-- 测试学生用户（密码: admin123）
 INSERT INTO `sys_user` (`username`, `password`, `real_name`, `role`, `phone`, `email`, `status`) 
 VALUES ('student1', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', '李四', 3, '13800138002', 'student1@exam.com', 1);
 
@@ -318,3 +333,18 @@ VALUES ('S2021001', '李四', 1, '13800138002', 'student1@exam.com', 1, 1, 3);
 INSERT INTO `teacher_class` (`teacher_id`, `class_id`, `subject`) VALUES 
 (1, 1, 'Java程序设计'),
 (1, 2, 'Java程序设计');
+
+-- ==================== 历史数据修复（可选） ====================
+-- 以下SQL用于修复已存在数据库中的数据问题，新数据库无需执行
+
+-- 修复1: 修复学生表中手机号和邮箱字段数据错位问题
+-- UPDATE student 
+-- SET phone = email, 
+--     email = phone 
+-- WHERE phone LIKE '%学院%' OR (email REGEXP '^[0-9]{11}$' AND phone NOT REGEXP '^[0-9]{11}$');
+
+-- 修复2: 修复特定学生密码
+-- UPDATE sys_user SET password = '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi' WHERE username = '2025005';
+
+-- 修复3: 修复teacher_id为null的试卷记录
+-- UPDATE paper SET teacher_id = 1 WHERE id IN (7, 13) AND teacher_id IS NULL;

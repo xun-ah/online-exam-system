@@ -36,6 +36,7 @@
             <el-option label="判断题" :value="3" />
             <el-option label="填空题" :value="4" />
             <el-option label="简答题" :value="5" />
+            <el-option label="编程题" :value="6" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -116,28 +117,40 @@
     <!-- 统计信息 -->
     <el-card class="stats-card" shadow="never" v-if="wrongList.length > 0">
       <el-row :gutter="20">
-        <el-col :span="6">
+        <el-col :span="4">
           <div class="stat-item">
             <div class="stat-label">错题总数</div>
             <div class="stat-value" style="color: #f56c6c;">{{ wrongList.length }}</div>
           </div>
         </el-col>
-        <el-col :span="6">
+        <el-col :span="4">
           <div class="stat-item">
             <div class="stat-label">单选题</div>
             <div class="stat-value" style="color: #409eff;">{{ countByType(1) }}</div>
           </div>
         </el-col>
-        <el-col :span="6">
+        <el-col :span="4">
           <div class="stat-item">
             <div class="stat-label">多选题</div>
             <div class="stat-value" style="color: #e6a23c;">{{ countByType(2) }}</div>
           </div>
         </el-col>
-        <el-col :span="6">
+        <el-col :span="4">
           <div class="stat-item">
             <div class="stat-label">判断题</div>
             <div class="stat-value" style="color: #67c23a;">{{ countByType(3) }}</div>
+          </div>
+        </el-col>
+        <el-col :span="4">
+          <div class="stat-item">
+            <div class="stat-label">填空题</div>
+            <div class="stat-value" style="color: #909399;">{{ countByType(4) }}</div>
+          </div>
+        </el-col>
+        <el-col :span="4">
+          <div class="stat-item">
+            <div class="stat-label">简答题</div>
+            <div class="stat-value" style="color: #f56c6c;">{{ countByType(5) }}</div>
           </div>
         </el-col>
       </el-row>
@@ -217,7 +230,11 @@
         
         <div class="practice-footer">
           <el-button @click="practiceDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="submitPractice" :disabled="!practiceAnswer">提交答案</el-button>
+          <el-button 
+            type="primary" 
+            @click="submitPractice" 
+            :disabled="currentQuestion?.questionType === 2 ? practiceMultipleAnswer.length === 0 : !practiceAnswer"
+          >提交答案</el-button>
         </div>
         
         <!-- 练习结果 -->
@@ -296,12 +313,12 @@ const formatDateTime = (dateTime) => {
 
 // 获取题目类型文本
 const getTypeText = (type) => {
-  return { 1: '单选题', 2: '多选题', 3: '判断题', 4: '简答题' }[type] || '未知'
+  return { 1: '单选题', 2: '多选题', 3: '判断题', 4: '填空题', 5: '简答题', 6: '编程题' }[type] || '未知'
 }
 
 // 获取题目类型标签类型
 const getTypeTagType = (type) => {
-  return { 1: '', 2: 'warning', 3: 'success', 4: 'info' }[type] || 'info'
+  return { 1: '', 2: 'warning', 3: 'success', 4: 'info', 5: 'danger', 6: 'primary' }[type] || 'info'
 }
 
 // 格式化答案显示
@@ -427,9 +444,25 @@ const toggleMultipleAnswer = (option) => {
 
 // 提交练习答案
 const submitPractice = () => {
-  if (!currentQuestion.value || !practiceAnswer.value) return
+  if (!currentQuestion.value) return
   
   const question = currentQuestion.value
+  
+  // 验证是否已选择答案
+  if (question.questionType === 2) {
+    // 多选题
+    if (practiceMultipleAnswer.value.length === 0) {
+      ElMessage.warning('请至少选择一个选项')
+      return
+    }
+  } else {
+    // 其他题型
+    if (!practiceAnswer.value) {
+      ElMessage.warning('请输入答案')
+      return
+    }
+  }
+  
   let isCorrect = false
   
   if (question.questionType === 1) {
@@ -441,12 +474,14 @@ const submitPractice = () => {
     const correctAns = question.correctAnswer.split(',').sort().join('')
     isCorrect = studentAns === correctAns
   } else if (question.questionType === 3) {
-    // 判断题
-    const studentAns = practiceAnswer.value.toLowerCase()
-    const correctAns = question.correctAnswer.toLowerCase()
-    isCorrect = studentAns === correctAns || 
-                (studentAns === 'true' && correctAns === 't') ||
-                (studentAns === 'false' && correctAns === 'f')
+    // 判断题：标准化后比较
+    const normalizeAnswer = (ans) => {
+      const a = ans.toLowerCase().trim()
+      if (a === '正确' || a === '√' || a === 't' || a === 'true' || a === '1' || a === '对') return 'T'
+      if (a === '错误' || a === '×' || a === 'x' || a === 'f' || a === 'false' || a === '0' || a === '错') return 'F'
+      return a
+    }
+    isCorrect = normalizeAnswer(practiceAnswer.value) === normalizeAnswer(question.correctAnswer)
   } else if (question.questionType === 4) {
     // 填空题
     const studentAns = practiceAnswer.value.trim()

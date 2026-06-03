@@ -8,16 +8,18 @@
         <result column="student_id" property="studentId"/>
         <result column="score" property="score"/>
         <result column="answers" property="answers"/>
+        <result column="details" property="details"/>
         <result column="submit_time" property="submitTime"/>
         <result column="status" property="status"/>
         <result column="extra_minutes" property="extraMinutes"/>
         <result column="switch_count" property="switchCount"/>
+        <result column="question_order" property="questionOrder"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
     </resultMap>
     
     <sql id="Base_Column_List">
-        id, exam_id, student_id, score, answers, submit_time, status, extra_minutes, switch_count, create_time, update_time
+        id, exam_id, student_id, score, answers, details, submit_time, status, extra_minutes, switch_count, question_order, create_time, update_time
     </sql>
     
     <select id="selectById" resultMap="BaseResultMap">
@@ -40,8 +42,8 @@
     </select>
     
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO exam_record (exam_id, student_id, score, answers, submit_time, status)
-        VALUES (#{examId}, #{studentId}, #{score}, #{answers}, #{submitTime}, #{status})
+        INSERT INTO exam_record (exam_id, student_id, score, answers, submit_time, status, question_order)
+        VALUES (#{examId}, #{studentId}, #{score}, #{answers}, #{submitTime}, #{status}, #{questionOrder})
     </insert>
     
     <update id="updateById">
@@ -49,10 +51,12 @@
         <set>
             <if test="score != null">score = #{score},</if>
             <if test="answers != null">answers = #{answers},</if>
+            <if test="details != null">details = #{details},</if>
             <if test="submitTime != null">submit_time = #{submitTime},</if>
             <if test="status != null">status = #{status},</if>
             <if test="extraMinutes != null">extra_minutes = #{extraMinutes},</if>
             <if test="switchCount != null">switch_count = #{switchCount},</if>
+            <if test="questionOrder != null">question_order = #{questionOrder},</if>
         </set>
         WHERE id = #{id}
     </update>

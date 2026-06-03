@@ -14,6 +14,7 @@ import com.exam.mapper.StudentMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -169,10 +170,13 @@ public class StudentDashboardController {
     }
 
     /**
-     * 获取待考考试列表
+     * 获取待考考试列表（支持分页）
      */
     @GetMapping("/exams/pending")
-    public Result<List<Map<String, Object>>> getPendingExams(@RequestAttribute("userId") Long userId) {
+    public Result<Map<String, Object>> getPendingExams(
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestAttribute("userId") Long userId) {
         // 获取学生信息
         Student student = studentMapper.selectByUserId(userId);
         if (student == null) {
@@ -204,7 +208,12 @@ public class StudentDashboardController {
         // 根据班级ID查询考试列表（只显示该班级的考试）
         List<Exam> exams = examMapper.selectListByClassId(student.getClassId());
         if (exams == null || exams.isEmpty()) {
-            return Result.success(new ArrayList<>());
+            Map<String, Object> emptyResult = new HashMap<>();
+            emptyResult.put("records", new ArrayList<>());
+            emptyResult.put("total", 0);
+            emptyResult.put("pageNum", pageNum);
+            emptyResult.put("pageSize", pageSize);
+            return Result.success(emptyResult);
         }
         
         // 过滤未删除的考试，并计算动态状态
@@ -342,9 +351,35 @@ public class StudentDashboardController {
                 
                 return examData;
             })
+            .sorted((a, b) -> {
+                // 按开始时间倒序，最近的考试在前
+                LocalDateTime startTimeA = (LocalDateTime) a.get("startTime");
+                LocalDateTime startTimeB = (LocalDateTime) b.get("startTime");
+                System.out.println("[排序] 考试A: " + a.get("examName") + " 时间: " + startTimeA + ", 考试B: " + b.get("examName") + " 时间: " + startTimeB);
+                return startTimeB.compareTo(startTimeA); // 倒序
+            })
             .collect(Collectors.toList());
         
-        return Result.success(pendingExams);
+        // 实现分页
+        int total = pendingExams.size();
+        int fromIndex = (pageNum - 1) * pageSize;
+        int toIndex = Math.min(fromIndex + pageSize, total);
+        
+        List<Map<String, Object>> pageList;
+        if (fromIndex < total) {
+            pageList = pendingExams.subList(fromIndex, toIndex);
+        } else {
+            pageList = new ArrayList<>();
+        }
+        
+        // 返回分页结果
+        Map<String, Object> result = new HashMap<>();
+        result.put("records", pageList);
+        result.put("total", total);
+        result.put("pageNum", pageNum);
+        result.put("pageSize", pageSize);
+        
+        return Result.success(result);
     }
 
     /**
@@ -361,6 +396,15 @@ public class StudentDashboardController {
         // 查询学生的考试记录
         List<ExamRecord> records = examRecordMapper.selectList(null, student.getId());
         if (records == null || records.isEmpty()) {
+            return Result.success(new ArrayList<>());
+        }
+        
+        // 只返回已提交或已阅卷的记录（status >= 1）
+        records = records.stream()
+            .filter(record -> record.getStatus() != null && record.getStatus() >= 1)
+            .collect(Collectors.toList());
+        
+        if (records.isEmpty()) {
             return Result.success(new ArrayList<>());
         }
         
@@ -418,7 +462,10 @@ public class StudentDashboardController {
      * 获取最近考试记录
      */
     @GetMapping("/exams/recent")
-    public Result<List<Map<String, Object>>> getRecentExams(@RequestAttribute("userId") Long userId) {
+    public Result<Map<String, Object>> getRecentExams(
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "2") int pageSize,
+            @RequestAttribute("userId") Long userId) {
         // 获取学生信息
         Student student = studentMapper.selectByUserId(userId);
         if (student == null) {
@@ -428,7 +475,12 @@ public class StudentDashboardController {
         // 查询学生的考试记录
         List<ExamRecord> records = examRecordMapper.selectList(null, student.getId());
         if (records == null || records.isEmpty()) {
-            return Result.success(new ArrayList<>());
+            Map<String, Object> emptyResult = new HashMap<>();
+            emptyResult.put("records", new ArrayList<>());
+            emptyResult.put("total", 0);
+            emptyResult.put("pageNum", pageNum);
+            emptyResult.put("pageSize", pageSize);
+            return Result.success(emptyResult);
         }
         
         // 获取考试信息
@@ -440,8 +492,8 @@ public class StudentDashboardController {
             }
         }
         
-        // 组装数据，只取最近5条已提交的记录
-        List<Map<String, Object>> recentList = records.stream()
+        // 组装数据，获取所有已提交的记录
+        List<Map<String, Object>> allRecentList = records.stream()
             .filter(record -> record.getStatus() != null && record.getStatus() == 2) // 已提交
             .map(record -> {
                 Exam exam = examMap.get(record.getExamId());
@@ -458,10 +510,27 @@ public class StudentDashboardController {
             })
             .filter(Objects::nonNull)
             .sorted((a, b) -> Long.compare((Long) b.get("id"), (Long) a.get("id"))) // 按记录ID降序
-            .limit(5)
             .collect(Collectors.toList());
         
-        return Result.success(recentList);
+        // 分页处理
+        int total = allRecentList.size();
+        int fromIndex = (pageNum - 1) * pageSize;
+        int toIndex = Math.min(fromIndex + pageSize, total);
+        
+        List<Map<String, Object>> pagedList;
+        if (fromIndex >= total) {
+            pagedList = new ArrayList<>();
+        } else {
+            pagedList = allRecentList.subList(fromIndex, toIndex);
+        }
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("records", pagedList);
+        result.put("total", total);
+        result.put("pageNum", pageNum);
+        result.put("pageSize", pageSize);
+        
+        return Result.success(result);
     }
 
     /**
@@ -694,41 +763,77 @@ public class StudentDashboardController {
                     continue; // 解析失败
                 }
                 
+                // 判断是否已阅卷
+                boolean isGraded = record.getStatus() != null && record.getStatus() >= 2;
+                
                 // 遍历题目，找出错题
                 for (cn.hutool.json.JSONObject q : questions) {
                     Long questionId = q.getLong("questionId");
                     Question question = questionMapper.selectById(questionId);
                     if (question == null) continue;
                     
-                    // 只处理客观题（单选、多选、判断）
-                    if (question.getType() == 4 || question.getType() == 5) continue;
-                    
                     String studentAnswer = answerMap.get(questionId);
+                    if (studentAnswer == null) continue; // 没有作答的题目跳过
                     
                     // 判断答案是否正确
                     boolean isCorrect = false;
-                    if (question.getType() == 1 || question.getType() == 3) {
-                        // 单选题或判断题：直接比较
-                        if (studentAnswer != null) {
-                            isCorrect = question.getAnswer().trim().equalsIgnoreCase(studentAnswer.trim());
+                    
+                    // 如果已阅卷，根据每题得分判断
+                    if (isGraded && record.getDetails() != null) {
+                        try {
+                            // 解析答题详情，查找该题得分
+                            cn.hutool.json.JSONArray details = cn.hutool.json.JSONUtil.parseArray(record.getDetails());
+                            for (int i = 0; i < details.size(); i++) {
+                                cn.hutool.json.JSONObject detail = details.getJSONObject(i);
+                                Long detailQuestionId = detail.getLong("questionId");
+                                if (detailQuestionId != null && detailQuestionId.equals(questionId)) {
+                                    // 找到该题，判断得分
+                                    BigDecimal questionScore = detail.getBigDecimal("score");
+                                    BigDecimal questionTotalScore = q.getBigDecimal("score");
+                                    if (questionTotalScore != null && questionTotalScore.compareTo(BigDecimal.ZERO) > 0) {
+                                        // 得分 == 满分，视为答对
+                                        if (questionScore != null && questionScore.compareTo(questionTotalScore) == 0) {
+                                            isCorrect = true;
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        } catch (Exception e) {
+                            // 解析失败，使用自动判分
                         }
-                    } else if (question.getType() == 2) {
-                        // 多选题：排序后比较
-                        if (studentAnswer != null) {
+                    }
+                    
+                    // 如果没有从详情中判断出来，使用自动判分
+                    if (!isCorrect && (!isGraded || record.getDetails() == null)) {
+                        if (question.getType() == 1) {
+                            // 单选题：直接比较
+                            isCorrect = question.getAnswer().trim().equalsIgnoreCase(studentAnswer.trim());
+                        } else if (question.getType() == 3) {
+                            // 判断题：标准化后比较
+                            isCorrect = isTrueFalseMatch(question.getAnswer(), studentAnswer);
+                        } else if (question.getType() == 2) {
+                            // 多选题：排序后比较
                             String sortedStudent = sortAnswer(studentAnswer);
                             String sortedCorrect = sortAnswer(question.getAnswer());
                             isCorrect = sortedStudent.equals(sortedCorrect);
-                        }
-                    } else if (question.getType() == 4) {
-                        // 简答题：主观题，只要答了就算有记录（判分由老师决定）
-                        if (studentAnswer != null && !studentAnswer.trim().isEmpty()) {
-                            // 简答题不判断对错，只要提交了就加入错题本供复习
-                            isCorrect = false; // 简答题默认视为需要复习
+                        } else if (question.getType() == 4) {
+                            // 填空题：支持多个答案，包含匹配
+                            String[] correctAnswers = question.getAnswer().split("[,|，]");
+                            String studentAns = studentAnswer.trim();
+                            for (String ans : correctAnswers) {
+                                String correctAns = ans.trim();
+                                if (studentAns.equalsIgnoreCase(correctAns) || 
+                                    studentAns.contains(correctAns) || 
+                                    correctAns.contains(studentAns)) {
+                                    isCorrect = true;
+                                    break;
+                                }
+                            }
                         } else {
-                            continue; // 没答案就跳过
+                            // 主观题（简答/编程），如果没有详情数据，跳过
+                            continue;
                         }
-                    } else {
-                        continue; // 其他类型跳过
                     }
                     
                     // 如果答错或需要复习，加入错题本
@@ -764,6 +869,32 @@ public class StudentDashboardController {
         List<String> parts = Arrays.asList(answer.split(","));
         Collections.sort(parts);
         return String.join(",", parts);
+    }
+    
+    /**
+     * 判断题答案匹配（兼容多种格式）
+     */
+    private boolean isTrueFalseMatch(String correctAnswer, String studentAnswer) {
+        String correct = normalizeTrueFalse(correctAnswer);
+        String student = normalizeTrueFalse(studentAnswer);
+        return correct.equals(student);
+    }
+    
+    /**
+     * 将判断题答案标准化为 "T" 或 "F"
+     */
+    private String normalizeTrueFalse(String answer) {
+        if (answer == null) return "";
+        String ans = answer.trim().toLowerCase();
+        // 正确的各种表示
+        if (ans.equals("正确") || ans.equals("√") || ans.equals("t") || ans.equals("true") || ans.equals("1") || ans.equals("对")) {
+            return "T";
+        }
+        // 错误的各种表示
+        if (ans.equals("错误") || ans.equals("×") || ans.equals("x") || ans.equals("f") || ans.equals("false") || ans.equals("0") || ans.equals("错")) {
+            return "F";
+        }
+        return ans;
     }
     
     /**

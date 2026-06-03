@@ -124,11 +124,13 @@ public class TeacherGradingController {
     }
     
     /**
-     * 获取已阅卷列表
+     * 获取已阅卷列表（支持分页）
      */
     @GetMapping("/graded")
-    public Result<List<Map<String, Object>>> getGradedRecords(
+    public Result<Map<String, Object>> getGradedRecords(
             @RequestParam(required = false) Long examId,
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "10") int pageSize,
             @RequestAttribute("userId") Long userId) {
         
         // 获取教师所属院系ID
@@ -246,7 +248,26 @@ public class TeacherGradingController {
             gradedList.add(data);
         }
         
-        return Result.success(gradedList);
+        // 实现分页
+        int total = gradedList.size();
+        int fromIndex = (pageNum - 1) * pageSize;
+        int toIndex = Math.min(fromIndex + pageSize, total);
+        
+        List<Map<String, Object>> pageList;
+        if (fromIndex < total) {
+            pageList = gradedList.subList(fromIndex, toIndex);
+        } else {
+            pageList = new ArrayList<>();
+        }
+        
+        // 返回分页结果
+        Map<String, Object> result = new HashMap<>();
+        result.put("records", pageList);
+        result.put("total", total);
+        result.put("pageNum", pageNum);
+        result.put("pageSize", pageSize);
+        
+        return Result.success(result);
     }
     
     /**
@@ -419,6 +440,32 @@ public class TeacherGradingController {
         }
         
         return Result.success("评分提交成功", null);
+    }
+    
+    /**
+     * 打回考试记录（让学生重做）
+     */
+    @PostMapping("/{recordId}/rollback")
+    public Result<Void> rollbackExamRecord(@PathVariable Long recordId,
+                                           @RequestBody Map<String, String> params,
+                                           @RequestAttribute("userId") Long userId) {
+        ExamRecord record = examRecordMapper.selectById(recordId);
+        if (record == null) {
+            return Result.error("考试记录不存在");
+        }
+        
+        // 获取打回原因（可选）
+        String reason = params != null ? params.getOrDefault("reason", "") : "";
+        
+        // 重置记录状态为0（未提交/可重考），清空分数和答案
+        record.setStatus(0);
+        record.setScore(null);
+        record.setAnswers(null); // 清空答案，让学生重新答题
+        examRecordMapper.updateById(record);
+        
+        System.out.println("打回考试记录 - recordId: " + recordId + ", reason: " + reason);
+        
+        return Result.success("打回成功，学生可以重新考试", null);
     }
     
     /**

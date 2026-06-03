@@ -96,12 +96,46 @@ public class TeacherExamController {
      * 获取考试详情
      */
     @GetMapping("/{id}")
-    public Result<Exam> getExamById(@PathVariable Long id) {
+    public Result<Map<String, Object>> getExamById(@PathVariable Long id, @RequestAttribute("userId") Long userId) {
         Exam exam = examService.getExamById(id);
         if (exam == null) {
             return Result.error("考试不存在");
         }
-        return Result.success(exam);
+        
+        // 获取教师所属院系ID
+        Teacher teacher = teacherMapper.selectByUserId(userId);
+        if (teacher == null) {
+            return Result.error("未找到教师信息");
+        }
+        
+        // 构建返回数据
+        Map<String, Object> examData = new HashMap<>();
+        examData.put("id", exam.getId());
+        examData.put("examName", exam.getExamName());
+        examData.put("paperId", exam.getPaperId());
+        examData.put("paperName", exam.getPaperName());
+        examData.put("classId", exam.getClassId());
+        examData.put("className", exam.getClassName());
+        examData.put("startTime", exam.getStartTime());
+        examData.put("endTime", exam.getEndTime());
+        examData.put("duration", exam.getDuration());
+        examData.put("status", exam.getStatus());
+        examData.put("subject", exam.getSubject());
+        // 确保 shuffleEnabled 不为 null，默认为 0
+        examData.put("shuffleEnabled", exam.getShuffleEnabled() != null ? exam.getShuffleEnabled() : 0);
+        
+        // 统计已完成人数（status >= 1）
+        List<ExamRecord> records = examRecordMapper.selectList(exam.getId(), null);
+        long completedCount = records.stream()
+            .filter(r -> r.getStatus() != null && r.getStatus() >= 1)
+            .count();
+        examData.put("participantCount", completedCount);
+        
+        // 统计班级总人数
+        int totalCount = studentMapper.count(null, null, exam.getClassId(), teacher.getDepartmentId());
+        examData.put("totalCount", totalCount);
+        
+        return Result.success(examData);
     }
     
     /**
@@ -110,6 +144,8 @@ public class TeacherExamController {
     @SysLog("创建考试")
     @PostMapping
     public Result<Void> createExam(@RequestBody Exam exam, @RequestAttribute("userId") Long userId) {
+        System.out.println("[创建考试] 接收到的数据 - shuffleEnabled: " + exam.getShuffleEnabled());
+        
         // 通过userId查询教师信息
         Teacher teacher = teacherMapper.selectByUserId(userId);
         if (teacher != null) {

@@ -67,14 +67,15 @@
           </el-select>
         </el-form-item>
         <el-form-item label="参考班级">
-          <el-select v-model="examForm.classId" placeholder="请选择班级" style="width:100%">
-            <el-option 
+          <el-checkbox-group v-model="examForm.classIds" style="display: flex; flex-direction: column; gap: 8px;">
+            <el-checkbox 
               v-for="cls in classList" 
               :key="cls.classId" 
-              :label="cls.className" 
-              :value="cls.classId"
-            />
-          </el-select>
+              :label="cls.classId"
+            >
+              {{ cls.className }}
+            </el-checkbox>
+          </el-checkbox-group>
         </el-form-item>
         <el-form-item label="开始时间">
           <el-date-picker 
@@ -93,7 +94,13 @@
           />
         </el-form-item>
         <el-form-item label="启用乱序">
-          <el-switch v-model="examForm.shuffleEnabled" active-text="启用" inactive-text="不启用" />
+          <el-switch 
+            v-model="examForm.shuffleEnabled" 
+            :active-value="1" 
+            :inactive-value="0"
+            active-text="启用" 
+            inactive-text="不启用" 
+          />
           <div style="font-size:12px; color:#909399; margin-top:5px;">启用后，每位学生看到的题目顺序和选项顺序将随机打乱</div>
         </el-form-item>
       </el-form>
@@ -320,10 +327,10 @@ const pagination = reactive({ pageNum: 1, pageSize: 10 })
 const examForm = reactive({ 
   examName: '', 
   paperId: null, 
-  classId: null, 
+  classIds: [], // 改为数组支持多选
   startTime: '', 
   endTime: '',
-  shuffleEnabled: 1 // 默认启用乱序
+  shuffleEnabled: 0 // 默认不启用，避免显示混乱
 })
 const monitorData = reactive({ 
   totalCount: 0, 
@@ -444,8 +451,8 @@ const submitExam = async () => {
     ElMessage.warning('请选择试卷')
     return
   }
-  if (!examForm.classId) {
-    ElMessage.warning('请选择班级')
+  if (!examForm.classIds || examForm.classIds.length === 0) {
+    ElMessage.warning('请至少选择一个班级')
     return
   }
   if (!examForm.startTime || !examForm.endTime) {
@@ -468,19 +475,30 @@ const submitExam = async () => {
       return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`
     }
     
-    const submitData = {
-      ...examForm,
-      startTime: formatTime(examForm.startTime),
-      endTime: formatTime(examForm.endTime)
-    }
+    // 如果选择了多个班级，为每个班级创建考试
+    const promises = examForm.classIds.map(async (classId) => {
+      const submitData = {
+        examName: examForm.examName,
+        paperId: examForm.paperId,
+        classId: classId,
+        startTime: formatTime(examForm.startTime),
+        endTime: formatTime(examForm.endTime),
+        // 确保只提交 1 或 0
+        shuffleEnabled: examForm.shuffleEnabled === 1 ? 1 : 0
+      }
+            
+      console.log('[创建/编辑考试] examForm.shuffleEnabled 原始值:', examForm.shuffleEnabled, '类型:', typeof examForm.shuffleEnabled)
+      console.log('[创建/编辑考试] 最终提交数据:', JSON.stringify(submitData))
+      
+      if (isEdit.value) {
+        return await updateExam(currentEditId.value, submitData)
+      } else {
+        return await publishExam(submitData)
+      }
+    })
     
-    if (isEdit.value) {
-      await updateExam(currentEditId.value, submitData)
-      ElMessage.success('修改成功')
-    } else {
-      await publishExam(submitData)
-      ElMessage.success('考试创建成功')
-    }
+    await Promise.all(promises)
+    ElMessage.success(isEdit.value ? '修改成功' : '考试创建成功')
     publishDialogVisible.value = false
     resetForm()
     fetchExams()
@@ -495,10 +513,10 @@ const resetForm = () => {
   currentEditId.value = null
   examForm.examName = ''
   examForm.paperId = null
-  examForm.classId = null
+  examForm.classIds = [] // 重置班级选择
   examForm.startTime = ''
   examForm.endTime = ''
-  examForm.shuffleEnabled = 1 // 重置为默认启用乱序
+  examForm.shuffleEnabled = 0 // 重置为默认不启用，避免显示混乱
 }
 
 const handleMonitor = async (row) => {
@@ -610,16 +628,23 @@ const handleEdit = async (row) => {
     
     const res = await getExamDetail(row.id)
     if (res.data) {
+      console.log('[编辑考试] 获取到的数据:', res.data)
+      console.log('[编辑考试] shuffleEnabled 值:', res.data.shuffleEnabled, '类型:', typeof res.data.shuffleEnabled)
+      
       isEdit.value = true
       currentEditId.value = row.id
       examForm.examName = res.data.examName
       examForm.paperId = res.data.paperId
-      examForm.classId = res.data.classId
+      // 编辑时仍为单个班级
+      examForm.classIds = res.data.classId ? [res.data.classId] : []
       // 处理时间格式
       examForm.startTime = res.data.startTime ? new Date(res.data.startTime) : ''
       examForm.endTime = res.data.endTime ? new Date(res.data.endTime) : ''
-      // 加载乱序设置，默认启用
-      examForm.shuffleEnabled = res.data.shuffleEnabled !== undefined ? res.data.shuffleEnabled : 1
+      // 加载乱序设置，后端返回 0 或 1
+      examForm.shuffleEnabled = res.data.shuffleEnabled !== undefined && res.data.shuffleEnabled !== null ? Number(res.data.shuffleEnabled) : 0
+      
+      console.log('[编辑考试] 赋值后的 examForm.shuffleEnabled:', examForm.shuffleEnabled)
+      
       publishDialogVisible.value = true
     }
   } catch (error) {

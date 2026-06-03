@@ -81,7 +81,8 @@
             >
               <span class="blank-label">第{{ index + 1 }}空：</span>
               <el-input 
-                v-model="fillBlankAnswers[question.questionId][index]"
+                :model-value="getFillBlankAnswer(question.questionId, index)"
+                @update:model-value="(val) => setFillBlankAnswer(question.questionId, index, val)"
                 placeholder="请输入答案"
                 @input="updateFillBlankAnswer(question.questionId)"
               />
@@ -197,7 +198,7 @@ const lastAutoSaveTime = ref(null)
 
 // 防切屏监控
 const switchCount = ref(0)
-const maxSwitchCount = 3 // 最大允许切屏次数
+const maxSwitchCount = ref(3) // 最大允许切屏次数，从考试配置获取
 const hasSwitchWarning = ref(false)
 
 // 开始倒计时
@@ -336,10 +337,13 @@ const handleVisibilityChange = () => {
 const handleSwitchScreen = () => {
   switchCount.value++
   
-  if (switchCount.value >= maxSwitchCount) {
+  // 保存到sessionStorage，防止刷新丢失
+  sessionStorage.setItem('exam_switch_count_' + examData.examId, switchCount.value.toString())
+  
+  if (switchCount.value >= maxSwitchCount.value) {
     // 超过限制，自动交卷（强制交卷，跳过确认）
     ElMessageBox.alert(
-      `检测到您已切屏 ${switchCount.value} 次，超过最大允许次数（${maxSwitchCount}次），系统将自动交卷。`,
+      `检测到您已切屏 ${switchCount.value} 次，超过最大允许次数（${maxSwitchCount.value}次），系统将自动交卷。`,
       '违规警告',
       {
         type: 'error',
@@ -353,8 +357,8 @@ const handleSwitchScreen = () => {
     })
   } else {
     // 警告提示
-    const remaining = maxSwitchCount - switchCount.value
-    ElMessage.warning(`️ 检测到切屏行为！剩余警告次数：${remaining} 次，超过 ${maxSwitchCount} 次将自动交卷`)
+    const remaining = maxSwitchCount.value - switchCount.value
+    ElMessage.warning(`️ 检测到切屏行为！剩余警告次数：${remaining} 次，超过 ${maxSwitchCount.value} 次将自动交卷`)
     hasSwitchWarning.value = true
   }
 }
@@ -382,6 +386,21 @@ const updateFillBlankAnswer = (questionId) => {
   answers[questionId] = validAnswers.join('|')
 }
 
+// 获取填空题某个空的答案
+const getFillBlankAnswer = (questionId, index) => {
+  return fillBlankAnswers[questionId] && fillBlankAnswers[questionId][index] 
+    ? fillBlankAnswers[questionId][index] 
+    : ''
+}
+
+// 设置填空题某个空的答案
+const setFillBlankAnswer = (questionId, index, value) => {
+  if (!fillBlankAnswers[questionId]) {
+    fillBlankAnswers[questionId] = []
+  }
+  fillBlankAnswers[questionId][index] = value
+}
+
 // 初始化填空题答案数组
 const initFillBlankAnswers = () => {
   questions.value.forEach(question => {
@@ -392,6 +411,56 @@ const initFillBlankAnswers = () => {
       }
     }
   })
+}
+
+// 从后端加载已保存的答案
+const loadSavedAnswers = async () => {
+  try {
+    // 尝试从sessionStorage恢复
+    const cachedAnswers = sessionStorage.getItem('exam_answers_' + examData.examId)
+    if (cachedAnswers) {
+      const parsed = JSON.parse(cachedAnswers)
+      // 清空现有答案
+      Object.keys(answers).forEach(key => delete answers[key])
+      // 恢复答案（按questionId匹配）
+      Object.assign(answers, parsed)
+      console.log('[前端] 从sessionStorage恢复答案', Object.keys(parsed).length, '题')
+      
+      // 恢复填空题答案
+      questions.value.forEach(question => {
+        if (question.type === 4 && answers[question.questionId]) {
+          const answerStr = answers[question.questionId]
+          const blanks = answerStr.split('|')
+          const blankCount = getBlankCount(question)
+          fillBlankAnswers[question.questionId] = new Array(blankCount).fill('')
+          blanks.forEach((blank, index) => {
+            if (index < blankCount) {
+              fillBlankAnswers[question.questionId][index] = blank
+            }
+          })
+        }
+      })
+      
+      return
+    }
+    
+    console.log('[前端] sessionStorage无缓存，使用空答案')
+  } catch (error) {
+    console.error('[前端] 加载已保存答案失败:', error)
+  }
+}
+
+// 从sessionStorage恢复切屏次数（页面刷新时使用）
+const loadSwitchCount = async () => {
+  try {
+    const cachedSwitchCount = sessionStorage.getItem('exam_switch_count_' + examData.examId)
+    if (cachedSwitchCount) {
+      switchCount.value = parseInt(cachedSwitchCount)
+      console.log('[前端] 从sessionStorage恢复切屏次数:', switchCount.value)
+    }
+  } catch (error) {
+    console.error('[前端] 加载切屏次数失败:', error)
+  }
 }
 
 // 保存答案
@@ -442,7 +511,8 @@ const handleSubmit = async (force = false) => {
     
     await submitExam(examData.examId, {
       recordId: recordId.value,
-      answers: answerList
+      answers: answerList,
+      switchCount: switchCount.value // 同步切屏次数到后端
     })
     
     ElMessage.success('提交成功')
@@ -466,56 +536,85 @@ const initExam = async () => {
       return
     }
     
-    // 从sessionStorage恢复答案
-    const savedAnswers = sessionStorage.getItem('exam_answers_' + examId)
-    if (savedAnswers) {
-      try {
-        Object.assign(answers, JSON.parse(savedAnswers))
-      } catch (e) {
-        console.error('恢复答案失败:', e)
-      }
+    // 先尝试开始考试
+    const startRes = await startExam(examId)
+    
+    // 如果返回“已经提交过”的错误，尝试加载已有记录
+    if (startRes.code === 500 && startRes.message && startRes.message.includes('已经提交过')) {
+      ElMessage.warning('您已完成该考试，无法再次进入')
+      router.push('/student/exam-record')
+      return
     }
     
-    // 获取考试详情
+    // 如果返回“已经开始”的标记，说明是重新进入
+    if (startRes.data && startRes.data.alreadyStarted) {
+      recordId.value = startRes.data.recordId
+      started.value = true
+      switchCount.value = startRes.data.switchCount || 0
+      sessionStorage.setItem('exam_switch_count_' + examId, switchCount.value.toString())
+    } else if (startRes.code === 200) {
+      // 正常开始考试
+      recordId.value = startRes.data.recordId
+      started.value = true
+      switchCount.value = startRes.data.switchCount || 0
+      sessionStorage.setItem('exam_switch_count_' + examId, switchCount.value.toString())
+    } else {
+      // 其他错误
+      ElMessage.error(startRes.message || '开始考试失败')
+      router.back()
+      return
+    }
+    
+    // 获取考试详情（后端已实现乱序，每次刷新都会重新乱序）
     const res = await getExamDetail(examId)
     if (res.code === 200 && res.data) {
       Object.assign(examData, res.data)
       questions.value = res.data.questions || []
       
-      // 初始化填空题答案数组
+      // 立即初始化填空题答案数组（必须在渲染前初始化，防止v-model报错）
       initFillBlankAnswers()
       
-      // 调试：打印第一题的数据结构，检查选项是否返回
-      if (questions.value.length > 0) {
-        console.log('题目数据示例:', questions.value[0])
-        console.log('题目选项:', {
-          A: questions.value[0].optionA,
-          B: questions.value[0].optionB,
-          C: questions.value[0].optionC,
-          D: questions.value[0].optionD
-        })
+      // 从考试配置中获取最大切屏次数（如果有）
+      if (res.data.maxSwitchCount) {
+        maxSwitchCount.value = res.data.maxSwitchCount
       }
       
-      // 开始考试
-      const startRes = await startExam(examId)
-      if (startRes.code === 200) {
-        recordId.value = startRes.data.recordId
-        started.value = true
-        // 使用考试结束时间计算剩余时间
-        startTimer()
-        
-        // 启动自动保存：每60秒自动保存一次
-        autoSaveTimer = setInterval(() => {
-          autoSaveAnswers()
-        }, 60000)
-        
-        // 启动防切屏监控
-        initSwitchMonitor()
+      console.log('[前端] 获取到', questions.value.length, '道题目')
+      if (questions.value.length > 0) {
+        console.log('[前端] 第一题ID:', questions.value[0].questionId, '内容:', questions.value[0].content)
       }
+      
+      // 从后端加载已保存的答案
+      await loadSavedAnswers()
+      
+      // 加载切屏次数
+      await loadSwitchCount()
+      
+      // 使用考试结束时间计算剩余时间
+      startTimer()
+      
+      // 启动自动保存：每60秒自动保存一次
+      autoSaveTimer = setInterval(() => {
+        autoSaveAnswers()
+      }, 60000)
+      
+      // 启动防切屏监控
+      initSwitchMonitor()
     }
   } catch (error) {
     console.error('初始化考试失败:', error)
-    ElMessage.error('加载考试失败')
+    console.error('错误对象结构:', JSON.stringify(error, null, 2))
+    
+    // 检查错误消息（axios拦截器会将错误消息放在error.message中）
+    const errorMsg = error.message || (error.response && error.response.data && error.response.data.message) || ''
+    
+    if (errorMsg.includes('已经提交过') || errorMsg.includes('已经参加过')) {
+      ElMessage.warning('您已完成该考试，无法再次进入')
+      router.push('/student/exam-record')
+      return
+    }
+    
+    ElMessage.error('加载考试失败：' + errorMsg)
   } finally {
     loading.value = false
   }

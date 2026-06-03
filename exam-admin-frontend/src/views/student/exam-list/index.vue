@@ -330,11 +330,11 @@ const getStatusType = (status) => {
 // 根据当前标签页过滤考试列表
 const filteredExamList = computed(() => {
   if (activeTab.value === 'pending') {
-    return examList.value.filter(exam => exam.status === 0)
+    return examList.value.filter(exam => exam.status === 0 && !exam.completed)
   } else if (activeTab.value === 'ongoing') {
-    return examList.value.filter(exam => exam.status === 1)
+    return examList.value.filter(exam => exam.status === 1 && !exam.completed)
   } else if (activeTab.value === 'completed') {
-    return examList.value.filter(exam => exam.status === 2)
+    return examList.value.filter(exam => exam.status === 2 || exam.completed)
   }
   return []
 })
@@ -349,9 +349,15 @@ const getExamStatusClass = (status) => {
 // 加载考试列表
 const loadExamList = async () => {
   try {
-    const res = await getPendingExamList()
+    // 获取全部数据，不分页
+    const res = await getPendingExamList({ pageNum: 1, pageSize: 1000 })
     if (res.code === 200 && res.data) {
-      examList.value = res.data
+      // 支持分页数据格式
+      if (res.data.records) {
+        examList.value = res.data.records
+      } else if (Array.isArray(res.data)) {
+        examList.value = res.data
+      }
     }
   } catch (error) {
     console.error('加载考试列表失败:', error)
